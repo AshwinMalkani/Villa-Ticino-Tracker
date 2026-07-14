@@ -1,6 +1,6 @@
 # Villa Ticino Rental Tracker
 
-Income & expense tracker for the rental property at 626 Villa Ticino Drive, Manteca CA — two units (main house + in-law suite), with a live dashboard, Schedule E tax summary, and mortgage-statement ingestion.
+Income & expense tracker for a rental property — two units (main house + in-law suite), with a live dashboard, Schedule E tax summary, and mortgage-statement ingestion.
 
 **Production:** https://rental.ashwinmalkani.dev — hosted on Cloudflare Workers + D1 (free tier), gated by Cloudflare Access (Google OAuth; three allowed emails, 24h sessions).
 
