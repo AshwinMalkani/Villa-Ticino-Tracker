@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Villa Ticino — Rental Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F7F6F2; --surface: #FFFFFF; --border: #E2E0D8; --text: #1A1916; --muted: #7A7870;
+    --green: #1A6B4A; --green-bg: #EAF4EE; --red: #A0321E; --red-bg: #FAF0EE;
+    --blue: #1A4A7A; --blue-bg: #EEF3FA; --purple: #4A2E7A; --purple-bg: #F2EEFC;
+    --mono: 'DM Mono', monospace; --sans: 'DM Sans', sans-serif;
+    --radius: 8px; --radius-lg: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--sans); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.6; min-height: 100vh; }
+  .app { max-width: 900px; margin: 0 auto; padding: 32px 24px; }
+  .header { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 32px; padding-bottom: 24px; border-bottom: 1px solid var(--border); }
+  .header-left h1 { font-size: 22px; font-weight: 500; letter-spacing: -0.02em; }
+  .header-left p { font-size: 13px; color: var(--muted); margin-top: 2px; font-family: var(--mono); }
+  .header-actions { display: flex; gap: 8px; align-items: center; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: var(--radius); font-size: 13px; font-family: var(--sans); cursor: pointer; border: 1px solid var(--border); background: var(--surface); color: var(--text); transition: background 0.15s; font-weight: 400; }
+  .btn:hover { background: var(--bg); }
+  .btn.primary { background: var(--text); color: #fff; border-color: var(--text); }
+  .btn.primary:hover { background: #333; }
+  .tabs { display: flex; gap: 2px; margin-bottom: 24px; background: var(--border); padding: 3px; border-radius: var(--radius); width: fit-content; }
+  .tab { padding: 7px 16px; border-radius: 6px; border: none; background: transparent; font-size: 13px; font-family: var(--sans); color: var(--muted); cursor: pointer; transition: all 0.15s; font-weight: 400; }
+  .tab.active { background: var(--surface); color: var(--text); font-weight: 500; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 20px; }
+  .metric { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px; }
+  .metric-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; font-family: var(--mono); }
+  .metric-value { font-size: 24px; font-weight: 300; font-family: var(--mono); letter-spacing: -0.02em; }
+  .metric-value.green { color: var(--green); }
+  .metric-value.red { color: var(--red); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; margin-bottom: 16px; }
+  .card-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); margin-bottom: 16px; font-family: var(--mono); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 8px 12px; color: var(--muted); font-weight: 400; border-bottom: 1px solid var(--border); font-size: 12px; font-family: var(--mono); }
+  td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--bg); }
+  .badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 4px; font-family: var(--mono); }
+  .badge-income { background: var(--green-bg); color: var(--green); }
+  .badge-main { background: var(--blue-bg); color: var(--blue); }
+  .badge-suite { background: var(--purple-bg); color: var(--purple); }
+  .badge-shared { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .form-group { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+  .form-label { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+  input, select { padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; font-family: var(--sans); background: var(--surface); color: var(--text); outline: none; transition: border-color 0.15s; width: 100%; }
+  input:focus, select:focus { border-color: var(--text); }
+  .drop-zone { border: 1.5px dashed var(--border); border-radius: var(--radius-lg); padding: 28px; text-align: center; cursor: pointer; color: var(--muted); font-size: 13px; margin-bottom: 16px; transition: all 0.15s; }
+  .drop-zone:hover { border-color: var(--text); background: var(--bg); }
+  .page { display: none; }
+  .page.active { display: block; }
+  .split-bar-wrap { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; }
+  .split-label { width: 110px; font-size: 13px; color: var(--muted); font-family: var(--mono); }
+  .split-bar { flex: 1; height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; }
+  .split-fill { height: 100%; border-radius: 3px; transition: width 0.4s; }
+  .split-val { font-size: 13px; font-family: var(--mono); min-width: 80px; text-align: right; }
+  .escrow-result { background: var(--bg); border-radius: var(--radius); padding: 12px 16px; font-family: var(--mono); font-size: 13px; margin: 12px 0; display: none; flex-wrap: wrap; gap: 16px; }
+  .escrow-result span { display: flex; flex-direction: column; gap: 2px; min-width: 120px; }
+  .escrow-result .ml { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .escrow-result .mv { font-size: 15px; font-weight: 500; }
+  .escrow-result .mv.green { color: var(--green); }
+  .escrow-result .mv.muted { color: var(--muted); }
+  .two-col { display: grid; grid-template-columns: 180px 1fr; gap: 20px; align-items: flex-start; }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+  .legend-val { margin-left: auto; font-family: var(--mono); color: var(--text); font-weight: 500; }
+  .tx-pos { color: var(--green); font-family: var(--mono); font-weight: 500; }
+  .tx-neg { color: var(--red); font-family: var(--mono); font-weight: 500; }
+  .delete-btn { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 15px; padding: 2px 6px; border-radius: 4px; line-height: 1; }
+  .delete-btn:hover { color: var(--red); background: var(--red-bg); }
+  .empty-state { text-align: center; padding: 32px; color: var(--muted); font-size: 13px; }
+  .schedule-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .schedule-row:last-child { border-bottom: none; }
+  .schedule-row.total { font-weight: 500; padding-top: 12px; }
+  .schedule-row.section-header { color: var(--muted); font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; padding-top: 16px; }
+  .notice { background: var(--blue-bg); color: var(--blue); border-radius: var(--radius); padding: 10px 14px; font-size: 12px; margin-bottom: 16px; font-family: var(--mono); }
+  .toast { position: fixed; bottom: 24px; right: 24px; background: var(--text); color: #fff; padding: 10px 18px; border-radius: var(--radius); font-size: 13px; font-family: var(--mono); opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 999; }
+  .toast.show { opacity: 1; }
+  .db-status { font-size: 11px; font-family: var(--mono); color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .db-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+  .non-ded { font-size: 10px; color: var(--muted); font-family: var(--mono); margin-left: 4px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div class="header-left">
+      <h1>626 Villa Ticino Drive</h1>
+      <p>Manteca, CA &mdash; Rental Income Tracker</p>
+    </div>
+    <div class="header-actions">
+      <div class="db-status"><div class="db-dot" id="db-dot"></div><span id="db-status-text">Connected</span></div>
+      <button class="btn" onclick="importJSON()">&#8679; Import JSON</button>
+      <button class="btn primary" onclick="exportJSON()">&#8681; Export JSON</button>
+      <input type="file" id="jsonImportInput" accept=".json" style="display:none" onchange="handleJSONImport(event)">
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('dashboard', this)">Dashboard</button>
+    <button class="tab" onclick="switchTab('transactions', this)">Transactions</button>
+    <button class="tab" onclick="switchTab('add', this)">Add entry</button>
+    <button class="tab" onclick="switchTab('tax', this)">Tax summary</button>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="page-dashboard" class="page active">
+    <div class="metric-grid" id="metrics"><div class="metric"><div class="metric-label">Loading...</div><div class="metric-value">--</div></div></div>
+    <div class="card">
+      <div class="card-title">Monthly cash flow</div>
+      <div style="position:relative;width:100%;height:220px"><canvas id="cfChart" role="img" aria-label="Monthly income and expense bar chart"></canvas></div>
+      <div style="display:flex;gap:16px;margin-top:12px;font-size:12px">
+        <span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:2px;background:#1A6B4A"></span><span style="color:var(--muted)">Income</span></span>
+        <span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:2px;background:#A0321E"></span><span style="color:var(--muted)">Expenses</span></span>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div class="card">
+        <div class="card-title">Expense breakdown</div>
+        <div class="two-col">
+          <div style="position:relative;width:180px;height:180px"><canvas id="expChart" role="img" aria-label="Expense breakdown donut chart"></canvas></div>
+          <div id="exp-legend"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Unit income split</div>
+        <div id="split-view" style="padding-top:8px"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TRANSACTIONS -->
+  <div id="page-transactions" class="page">
+    <div class="drop-zone" onclick="document.getElementById('csvInput').click()">
+      <div style="font-size:24px;margin-bottom:8px">&#8679;</div>
+      <div style="font-weight:500;color:var(--text);margin-bottom:4px">Drop bank CSV here or click to upload</div>
+      <div style="font-size:12px">Transactions will be imported and saved to the database</div>
+      <input type="file" id="csvInput" accept=".csv" style="display:none" onclick="event.stopPropagation()" onchange="handleCSV(event)">
+    </div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <div class="card-title" style="margin-bottom:0">All transactions</div>
+        <select id="filter-unit" style="width:160px;font-size:12px;padding:6px 10px" onchange="renderTable()">
+          <option value="all">All units</option>
+          <option value="main">Main unit</option>
+          <option value="suite">In-law suite</option>
+          <option value="shared">Shared</option>
+        </select>
+      </div>
+      <table>
+        <thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Unit</th><th>Amount</th><th></th></tr></thead>
+        <tbody id="tx-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ADD -->
+  <div id="page-add" class="page">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div class="card">
+        <div class="card-title">Add transaction</div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Date</label><input type="date" id="f-date"></div>
+          <div class="form-group"><label class="form-label">Amount ($)</label><input type="number" id="f-amount" placeholder="0.00" min="0" step="0.01"></div>
+        </div>
+        <div class="form-group"><label class="form-label">Description</label><input type="text" id="f-desc" placeholder="e.g. Main unit rent, water heater repair"></div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Type</label>
+            <select id="f-type" onchange="updateCategories()">
+              <option value="income">Income</option>
+              <option value="expense">Expense</option>
+            </select>
+          </div>
+          <div class="form-group"><label class="form-label">Category</label><select id="f-cat"></select></div>
+        </div>
+        <div class="form-group"><label class="form-label">Unit</label>
+          <select id="f-unit">
+            <option value="main">Main unit</option>
+            <option value="suite">In-law suite</option>
+            <option value="shared">Shared / whole property</option>
+          </select>
+        </div>
+        <div class="form-group"><label class="form-label">Notes (optional)</label><input type="text" id="f-notes" placeholder="e.g. receipt #1234"></div>
+        <button class="btn primary" style="width:100%" onclick="addTransaction()">Add transaction</button>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Escrow payment splitter</div>
+        <div class="drop-zone" style="padding:16px" onclick="document.getElementById('pdfInput').click()">
+          <div style="font-weight:500;color:var(--text);margin-bottom:2px">&#8679; Upload mortgage statement PDF</div>
+          <div style="font-size:12px">Principal, interest &amp; escrow are read automatically</div>
+          <input type="file" id="pdfInput" accept=".pdf,application/pdf" style="display:none" onclick="event.stopPropagation()" onchange="handleStatementPDF(event)">
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:16px;font-family:var(--mono)">Saves all 4 line items including principal for cash flow tracking. Only deductible items appear on Schedule E.</div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Total escrow payment ($)</label><input type="number" id="m-total" placeholder="e.g. 4086.01" oninput="calcEscrow()"></div>
+          <div class="form-group"><label class="form-label">Principal ($)</label><input type="number" id="m-principal" placeholder="e.g. 648.06" oninput="calcEscrow()"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Interest ($)</label><input type="number" id="m-interest" placeholder="e.g. 2141.19" oninput="calcEscrow()"></div>
+          <div class="form-group"><label class="form-label">Escrow (tax + insurance) ($)</label><input type="number" id="m-escrow" placeholder="e.g. 1296.76" oninput="calcEscrow()"></div>
+        </div>
+        <div class="escrow-result" id="escrow-result">
+          <span><span class="ml">Interest <span style="color:var(--green)">(deductible)</span></span><span class="mv green" id="e-int">--</span></span>
+          <span><span class="ml">Escrow <span style="color:var(--green)">(deductible)</span></span><span class="mv green" id="e-escrow">--</span></span>
+          <span><span class="ml">Principal <span style="color:var(--muted)">(not deductible)</span></span><span class="mv muted" id="e-prin">--</span></span>
+          <span><span class="ml">Unallocated</span><span class="mv muted" id="e-unalloc">--</span></span>
+        </div>
+        <div class="form-group" style="margin-top:4px"><label class="form-label">Date</label><input type="date" id="m-date"></div>
+        <button class="btn primary" style="width:100%;margin-top:4px" onclick="saveEscrow()">Save escrow breakdown</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAX -->
+  <div id="page-tax" class="page">
+    <div class="notice">Deductible expenses only. Principal is excluded from Schedule E.</div>
+    <div class="card">
+      <div class="card-title">Schedule E &mdash; rental income &amp; expenses</div>
+      <div id="schedule-e"></div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:4px">
+      <button class="btn primary" onclick="exportCSV()">&#8681; Export CSV for CPA</button>
+      <button class="btn" onclick="exportJSON()">&#8681; Export JSON backup</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script type="module">
+  import * as pdfjsLib from 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.min.mjs';
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.worker.min.mjs';
+  window.pdfjsLib = pdfjsLib;
+</script>
+<script>
+const INCOME_CATS = ['Rent - main unit','Rent - in-law suite','Late fee','Security deposit kept','Other income'];
+const EXPENSE_CATS = ['Mortgage interest','Escrow (property tax + insurance)','Mortgage principal (non-deductible)','Property tax','Insurance','Utilities','Repairs & maintenance','Appliance (Section 179)','Solar/energy','Advertising','Mileage','Professional fees','Other expense'];
+const NON_DEDUCTIBLE = ['Mortgage principal (non-deductible)'];
+const CAT_COLORS = {
+  'Mortgage interest':'#378ADD',
+  'Escrow (property tax + insurance)':'#B05EA0',
+  'Mortgage principal (non-deductible)':'#B4B2A9',
+  'Property tax':'#D4537E',
+  'Insurance':'#1D9E75',
+  'Utilities':'#BA7517',
+  'Repairs & maintenance':'#E24B4A',
+  'Appliance (Section 179)':'#534AB7',
+  'Solar/energy':'#1A8A5A',
+  'Advertising':'#5DCAA5',
+  'Mileage':'#888780',
+  'Professional fees':'#D85A30',
+  'Other expense':'#639922',
+  'Rent - main unit':'#1A6B4A',
+  'Rent - in-law suite':'#4A2E7A',
+  'Late fee':'#3B6D11',
+  'Security deposit kept':'#3B6D11',
+  'Other income':'#0F6E56'
+};
+
+let transactions = [];
+
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+
+function toast(msg) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(function() { t.classList.remove('show'); }, 2500);
+}
+
+function setDBStatus(ok) {
+  document.getElementById('db-dot').style.background = ok ? '#1A6B4A' : '#A0321E';
+  document.getElementById('db-status-text').textContent = ok ? 'DB connected' : 'DB error';
+}
+
+async function api(method, path, body) {
+  try {
+    var opts = { method: method, headers: body ? { 'Content-Type': 'application/json' } : {} };
+    if (body) opts.body = JSON.stringify(body);
+    var res = await fetch(path, opts);
+    if (!res.ok) throw new Error(await res.text());
+    return await res.json();
+  } catch(e) {
+    setDBStatus(false);
+    console.error(e);
+    throw e;
+  }
+}
+
+async function loadAll() {
+  try {
+    transactions = await api('GET', '/api/transactions');
+    transactions = transactions.map(function(t) { return Object.assign({}, t, { desc: t.description || t.desc }); });
+    setDBStatus(true);
+  } catch(e) { setDBStatus(false); }
+}
+
+async function addTransaction() {
+  var d = document.getElementById('f-date').value;
+  var a = parseFloat(document.getElementById('f-amount').value);
+  var desc = document.getElementById('f-desc').value.trim();
+  if (!d || !a || !desc) { toast('Fill in date, amount, and description.'); return; }
+  var tx = { id: uid(), date: d, description: desc, type: document.getElementById('f-type').value, category: document.getElementById('f-cat').value, unit: document.getElementById('f-unit').value, amount: a, notes: document.getElementById('f-notes').value };
+  await api('POST', '/api/transactions', tx);
+  transactions.unshift(Object.assign({}, tx, { desc: tx.description }));
+  document.getElementById('f-amount').value = '';
+  document.getElementById('f-desc').value = '';
+  document.getElementById('f-notes').value = '';
+  toast('Transaction saved.');
+  renderDashboard();
+}
+
+async function deleteTransaction(id) {
+  if (!confirm('Delete this transaction?')) return;
+  await api('DELETE', '/api/transactions/' + id);
+  transactions = transactions.filter(function(t) { return t.id !== id; });
+  renderTable();
+  renderDashboard();
+  toast('Deleted.');
+}
+
+function calcEscrow() {
+  var total = parseFloat(document.getElementById('m-total').value) || 0;
+  var principal = parseFloat(document.getElementById('m-principal').value) || 0;
+  var interest = parseFloat(document.getElementById('m-interest').value) || 0;
+  var escrow = parseFloat(document.getElementById('m-escrow').value) || 0;
+  var r = document.getElementById('escrow-result');
+  if (!total) { r.style.display = 'none'; return; }
+  var allocated = principal + interest + escrow;
+  var unalloc = Math.max(0, total - allocated);
+  r.style.display = 'flex';
+  document.getElementById('e-int').textContent = '$' + interest.toFixed(2);
+  document.getElementById('e-escrow').textContent = '$' + escrow.toFixed(2);
+  document.getElementById('e-prin').textContent = '$' + principal.toFixed(2);
+  document.getElementById('e-unalloc').textContent = '$' + unalloc.toFixed(2);
+}
+
+async function saveEscrow() {
+  var total = parseFloat(document.getElementById('m-total').value) || 0;
+  var principal = parseFloat(document.getElementById('m-principal').value) || 0;
+  var interest = parseFloat(document.getElementById('m-interest').value) || 0;
+  var escrow = parseFloat(document.getElementById('m-escrow').value) || 0;
+  var d = document.getElementById('m-date').value || new Date().toISOString().split('T')[0];
+  if (!total) { toast('Enter total escrow payment.'); return; }
+  if (!interest && !escrow && !principal) { toast('Enter at least one line item.'); return; }
+  var note = 'Escrow pmt $' + total.toFixed(2);
+  var items = [];
+  if (interest > 0) items.push({ category: 'Mortgage interest', amount: interest, description: 'Mortgage interest' });
+  if (escrow > 0) items.push({ category: 'Escrow (property tax + insurance)', amount: escrow, description: 'Escrow (property tax + insurance)' });
+  if (principal > 0) items.push({ category: 'Mortgage principal (non-deductible)', amount: principal, description: 'Mortgage principal' });
+  for (var i = 0; i < items.length; i++) {
+    var item = items[i];
+    var tx = { id: uid(), date: d, description: item.description, type: 'expense', category: item.category, unit: 'shared', amount: item.amount, notes: note };
+    await api('POST', '/api/transactions', tx);
+    transactions.unshift(Object.assign({}, tx, { desc: tx.description }));
+  }
+  ['m-total','m-principal','m-interest','m-escrow'].forEach(function(f) { document.getElementById(f).value = ''; });
+  document.getElementById('escrow-result').style.display = 'none';
+  renderDashboard();
+  toast('Saved ' + items.length + ' escrow line items.');
+}
+
+function parseStatementText(text) {
+  // Anchor to the first "Explanation of amount due" section — later pages
+  // can contain the servicer's sample statement with fake numbers.
+  var sectionStart = text.indexOf('Explanation of amount due');
+  if (sectionStart < 0) return { error: 'Could not find "Explanation of amount due" section. Is this a mortgage statement?' };
+  var section = text.slice(sectionStart, sectionStart + 600);
+
+  var grab = function(label) {
+    var m = section.match(new RegExp(label + '\\s*\\$([\\d,]+\\.\\d{2})'));
+    return m ? parseFloat(m[1].replace(/,/g, '')) : null;
+  };
+  var principal = grab('Principal');
+  var interest = grab('Interest');
+  var escrow = grab('Escrow\\s*\\(taxes & insurance\\)');
+  var total = grab('Total regular monthly payment');
+
+  var dateMatch = text.match(/Payment Due Date:\s*(\d{2})\/(\d{2})\/(\d{4})/);
+  var dueDate = dateMatch ? dateMatch[3] + '-' + dateMatch[1] + '-' + dateMatch[2] : null;
+
+  if (principal == null || interest == null || escrow == null) {
+    return { error: 'Found the statement section but could not read all amounts' };
+  }
+  var sumOk = total == null || Math.abs(principal + interest + escrow - total) < 1;
+  return { ok: true, principal: principal, interest: interest, escrow: escrow, total: total, dueDate: dueDate, sumOk: sumOk };
+}
+
+async function handleStatementPDF(e) {
+  var file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  toast('Reading statement...');
+  var res;
+  try {
+    var buf = await file.arrayBuffer();
+    var doc = await pdfjsLib.getDocument({ data: buf }).promise;
+    var page = await doc.getPage(1);  // everything we need is on page 1
+    var content = await page.getTextContent();
+    var text = content.items.map(function(it) { return it.str; }).join('\n');
+    res = parseStatementText(text);
+    if (!res.ok) { toast(res.error || 'Could not parse PDF.'); return; }
+  } catch(err) { console.error(err); toast('Could not parse PDF.'); return; }
+
+  document.getElementById('m-total').value = res.total != null ? res.total : (res.principal + res.interest + res.escrow).toFixed(2);
+  document.getElementById('m-principal').value = res.principal;
+  document.getElementById('m-interest').value = res.interest;
+  document.getElementById('m-escrow').value = res.escrow;
+  if (res.dueDate) document.getElementById('m-date').value = res.dueDate;
+  calcEscrow();
+
+  if (!res.sumOk) {
+    toast('Line items do not add up to the statement total — review before saving.');
+    return;
+  }
+
+  var date = res.dueDate || document.getElementById('m-date').value;
+  var dup = transactions.some(function(t) { return t.date === date && (t.category||t.cat) === 'Mortgage interest'; });
+  var msg = 'Statement parsed:\n\n' +
+    'Principal:  $' + res.principal.toFixed(2) + '\n' +
+    'Interest:   $' + res.interest.toFixed(2) + '\n' +
+    'Escrow:     $' + res.escrow.toFixed(2) + '\n' +
+    'Date:       ' + date +
+    (dup ? '\n\nWARNING: a mortgage interest entry already exists on this date. Saving again may create a duplicate.' : '') +
+    '\n\nLog these 3 line items?';
+  if (confirm(msg)) {
+    await saveEscrow();
+  } else {
+    toast('Loaded into the splitter — review and save when ready.');
+  }
+}
+
+async function exportJSON() {
+  var data = await api('GET', '/api/export');
+  var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'villa-ticino-' + new Date().toISOString().split('T')[0] + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('JSON exported.');
+}
+
+function importJSON() { document.getElementById('jsonImportInput').click(); }
+
+async function handleJSONImport(e) {
+  var file = e.target.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = async function(ev) {
+    try {
+      var data = JSON.parse(ev.target.result);
+      if (!data.transactions) { toast('Invalid file format.'); return; }
+      if (confirm('Import ' + data.transactions.length + ' transactions? This replaces current data.')) {
+        await api('POST', '/api/import', data);
+        await loadAll();
+        renderDashboard();
+        renderTable();
+        toast('Imported ' + data.transactions.length + ' transactions.');
+      }
+    } catch(err) { toast('Could not parse JSON file.'); }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+async function exportCSV() {
+  var header = 'Date,Description,Type,Category,Unit,Amount,Notes';
+  var rows = transactions.map(function(t) {
+    return t.date + ',"' + (t.desc||t.description) + '",' + t.type + ',"' + (t.category||t.cat) + '",' + t.unit + ',' + t.amount + ',"' + (t.notes||'') + '"';
+  });
+  var blob = new Blob([[header].concat(rows).join('\n')], { type: 'text/csv' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'villa-ticino-schedule-e-' + new Date().toISOString().split('T')[0] + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('CSV exported.');
+}
+
+async function handleCSV(e) {
+  var file = e.target.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = async function(ev) {
+    var lines = ev.target.result.split('\n').filter(function(l) { return l.trim(); });
+    var headers = lines[0].toLowerCase().split(',').map(function(h) { return h.replace(/"/g,'').trim(); });
+    var added = 0;
+    for (var i = 1; i < lines.length; i++) {
+      var cols = lines[i].split(',').map(function(c) { return c.replace(/"/g,'').trim(); });
+      var amountIdx = headers.findIndex(function(h) { return h.includes('amount'); });
+      var descIdx = headers.findIndex(function(h) { return h.includes('desc') || h.includes('memo') || h.includes('name'); });
+      var dateIdx = headers.findIndex(function(h) { return h.includes('date'); });
+      var amount = parseFloat(cols[amountIdx] || cols[3] || 0);
+      if (!amount) continue;
+      var description = (cols[descIdx] || cols[1] || 'Import').trim();
+      var date = (cols[dateIdx] || cols[0] || new Date().toISOString().split('T')[0]).trim();
+      var type = amount > 0 ? 'income' : 'expense';
+      var tx = { id: uid(), date: date, description: description, type: type, category: type==='income'?'Other income':'Other expense', unit: 'shared', amount: Math.abs(amount), notes: 'Imported -- recategorize' };
+      await api('POST', '/api/transactions', tx);
+      transactions.unshift(Object.assign({}, tx, { desc: tx.description }));
+      added++;
+    }
+    renderTable();
+    renderDashboard();
+    toast('Imported ' + added + ' transactions.');
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+function switchTab(t, btn) {
+  document.querySelectorAll('.tab').forEach(function(b) { b.classList.remove('active'); });
+  document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
+  btn.classList.add('active');
+  document.getElementById('page-' + t).classList.add('active');
+  if (t === 'dashboard') renderDashboard();
+  if (t === 'transactions') renderTable();
+  if (t === 'tax') renderTax();
+}
+
+function updateCategories() {
+  var type = document.getElementById('f-type').value;
+  document.getElementById('f-cat').innerHTML = (type==='income' ? INCOME_CATS : EXPENSE_CATS).map(function(c) { return '<option value="' + c + '">' + c + '</option>'; }).join('');
+}
+updateCategories();
+
+function renderTable() {
+  var filter = document.getElementById('filter-unit').value;
+  var list = transactions.slice().sort(function(a,b) { return b.date.localeCompare(a.date); });
+  if (filter !== 'all') list = list.filter(function(t) { return t.unit === filter; });
+  var body = document.getElementById('tx-body');
+  if (!list.length) { body.innerHTML = '<tr><td colspan="6"><div class="empty-state">No transactions yet.</div></td></tr>'; return; }
+  body.innerHTML = list.map(function(t) {
+    var desc = t.desc || t.description || '';
+    var cat = t.category || t.cat || '';
+    var unitBadge = t.unit==='main' ? 'badge-main' : t.unit==='suite' ? 'badge-suite' : 'badge-shared';
+    var unitLabel = t.unit==='main' ? 'Main' : t.unit==='suite' ? 'Suite' : 'Shared';
+    var catColor = CAT_COLORS[cat] || '#888';
+    var isNonDed = NON_DEDUCTIBLE.indexOf(cat) >= 0;
+    return '<tr>' +
+      '<td style="font-family:var(--mono);font-size:12px">' + t.date + '</td>' +
+      '<td>' + desc + (t.notes ? '<div style="font-size:11px;color:var(--muted)">' + t.notes + '</div>' : '') + '</td>' +
+      '<td><span class="badge" style="background:' + catColor + '22;color:' + catColor + '">' + cat + (isNonDed ? ' <span style="opacity:0.6">*</span>' : '') + '</span></td>' +
+      '<td><span class="badge ' + unitBadge + '">' + unitLabel + '</span></td>' +
+      '<td class="' + (t.type==='income'?'tx-pos':'tx-neg') + '">' + (t.type==='income'?'+':'-') + '$' + t.amount.toLocaleString() + (isNonDed ? '<span class="non-ded">equity</span>' : '') + '</td>' +
+      '<td><button class="delete-btn" onclick="deleteTransaction(\'' + t.id + '\')">&#x2715;</button></td>' +
+      '</tr>';
+  }).join('');
+}
+
+var cfInst = null, expInst = null;
+
+function renderDashboard() {
+  var totalIncome = transactions.filter(function(t){return t.type==='income';}).reduce(function(s,t){return s+t.amount;},0);
+  var totalExpense = transactions.filter(function(t){return t.type==='expense';}).reduce(function(s,t){return s+t.amount;},0);
+  var net = totalIncome - totalExpense;
+  var mainIncome = transactions.filter(function(t){return t.type==='income'&&t.unit==='main';}).reduce(function(s,t){return s+t.amount;},0);
+  var suiteIncome = transactions.filter(function(t){return t.type==='income'&&t.unit==='suite';}).reduce(function(s,t){return s+t.amount;},0);
+
+  document.getElementById('metrics').innerHTML =
+    '<div class="metric"><div class="metric-label">Total income</div><div class="metric-value green">$' + totalIncome.toLocaleString() + '</div></div>' +
+    '<div class="metric"><div class="metric-label">Total expenses</div><div class="metric-value red">$' + totalExpense.toLocaleString() + '</div></div>' +
+    '<div class="metric"><div class="metric-label">Net cash flow</div><div class="metric-value ' + (net>=0?'green':'red') + '">$' + net.toLocaleString() + '</div></div>' +
+    '<div class="metric"><div class="metric-label">Main unit</div><div class="metric-value">$' + mainIncome.toLocaleString() + '</div></div>' +
+    '<div class="metric"><div class="metric-label">In-law suite</div><div class="metric-value">$' + suiteIncome.toLocaleString() + '</div></div>';
+
+  var months = {};
+  transactions.forEach(function(t) {
+    var m = t.date.slice(0,7);
+    if (!months[m]) months[m] = { income: 0, expense: 0 };
+    if (t.type==='income') months[m].income += t.amount;
+    else months[m].expense += t.amount;
+  });
+  var labels = Object.keys(months).sort();
+
+  if (cfInst) cfInst.destroy();
+  cfInst = new Chart(document.getElementById('cfChart'), {
+    type: 'bar',
+    data: {
+      labels: labels.map(function(l) { var p = l.split('-'); return new Date(p[0], p[1]-1).toLocaleDateString('en-US',{month:'short',year:'2-digit'}); }),
+      datasets: [
+        { label: 'Income', data: labels.map(function(l){return months[l].income;}), backgroundColor: '#1A6B4A', borderRadius: 4, borderSkipped: false },
+        { label: 'Expenses', data: labels.map(function(l){return months[l].expense;}), backgroundColor: '#A0321E', borderRadius: 4, borderSkipped: false }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: '#7A7870', font: { size: 11, family: 'DM Mono' } } },
+        y: { grid: { color: 'rgba(0,0,0,0.04)' }, ticks: { color: '#7A7870', font: { size: 11, family: 'DM Mono' }, callback: function(v) { return '$' + v.toLocaleString(); } } }
+      }
+    }
+  });
+
+  var expByCat = {};
+  transactions.filter(function(t){return t.type==='expense';}).forEach(function(t) {
+    var c = t.category || t.cat;
+    expByCat[c] = (expByCat[c]||0) + t.amount;
+  });
+  var expLabels = Object.keys(expByCat);
+  var expVals = expLabels.map(function(l){return expByCat[l];});
+  var expColors = expLabels.map(function(l){return CAT_COLORS[l]||'#888';});
+
+  if (expInst) expInst.destroy();
+  if (expLabels.length) {
+    expInst = new Chart(document.getElementById('expChart'), {
+      type: 'doughnut',
+      data: { labels: expLabels, datasets: [{ data: expVals, backgroundColor: expColors, borderWidth: 0 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, cutout: '65%' }
+    });
+    document.getElementById('exp-legend').innerHTML = expLabels.map(function(l,i) {
+      return '<div class="legend-item"><span class="legend-dot" style="background:' + expColors[i] + '"></span>' + l + '<span class="legend-val">$' + expVals[i].toLocaleString() + '</span></div>';
+    }).join('');
+  }
+
+  var total = totalIncome || 1;
+  document.getElementById('split-view').innerHTML =
+    '<div class="split-bar-wrap"><span class="split-label">Main unit</span><div class="split-bar"><div class="split-fill" style="width:' + Math.round(mainIncome/total*100) + '%;background:#378ADD"></div></div><span class="split-val">$' + mainIncome.toLocaleString() + '</span></div>' +
+    '<div class="split-bar-wrap"><span class="split-label">In-law suite</span><div class="split-bar"><div class="split-fill" style="width:' + Math.round(suiteIncome/total*100) + '%;background:#534AB7"></div></div><span class="split-val">$' + suiteIncome.toLocaleString() + '</span></div>' +
+    '<div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:8px">Main ' + Math.round(mainIncome/total*100) + '% &middot; Suite ' + Math.round(suiteIncome/total*100) + '%</div>';
+}
+
+function renderTax() {
+  var cats = {};
+  transactions.forEach(function(t) {
+    var c = t.category || t.cat;
+    if (!cats[c]) cats[c] = { income: 0, expense: 0 };
+    if (t.type==='income') cats[c].income += t.amount;
+    else cats[c].expense += t.amount;
+  });
+  var totalIncome = transactions.filter(function(t){return t.type==='income';}).reduce(function(s,t){return s+t.amount;},0);
+  var deductibleExpense = transactions.filter(function(t){return t.type==='expense' && NON_DEDUCTIBLE.indexOf(t.category||t.cat) < 0;}).reduce(function(s,t){return s+t.amount;},0);
+  var net = totalIncome - deductibleExpense;
+
+  var html = '<div class="schedule-row section-header"><span>Income</span><span></span></div>';
+  INCOME_CATS.forEach(function(c) {
+    if (cats[c] && cats[c].income > 0) html += '<div class="schedule-row"><span>' + c + '</span><span style="font-family:var(--mono);color:var(--green)">$' + cats[c].income.toLocaleString() + '</span></div>';
+  });
+  html += '<div class="schedule-row total"><span>Total income</span><span style="font-family:var(--mono);color:var(--green)">$' + totalIncome.toLocaleString() + '</span></div>';
+  html += '<div class="schedule-row section-header"><span>Deductible expenses</span><span></span></div>';
+  EXPENSE_CATS.forEach(function(c) {
+    if (NON_DEDUCTIBLE.indexOf(c) >= 0) return;
+    if (cats[c] && cats[c].expense > 0) html += '<div class="schedule-row"><span>' + c + '</span><span style="font-family:var(--mono);color:var(--red)">($' + cats[c].expense.toLocaleString() + ')</span></div>';
+  });
+  html += '<div class="schedule-row total"><span>Total deductible expenses</span><span style="font-family:var(--mono);color:var(--red)">($' + deductibleExpense.toLocaleString() + ')</span></div>';
+  html += '<div class="schedule-row total" style="border-top:2px solid var(--border);padding-top:16px;margin-top:4px"><span>Net rental income</span><span style="font-family:var(--mono);color:' + (net>=0?'var(--green)':'var(--red)') + '">$' + net.toLocaleString() + '</span></div>';
+  document.getElementById('schedule-e').innerHTML = html;
+}
+
+document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
+document.getElementById('m-date').value = new Date().toISOString().split('T')[0];
+loadAll().then(function() { renderDashboard(); renderTable(); });
+</script>
+</body>
+</html>

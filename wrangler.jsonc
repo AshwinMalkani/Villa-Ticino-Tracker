@@ -1,0 +1,23 @@
+{
+  "name": "villa-ticino-tracker",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-07-01",
+  "assets": {
+    "directory": "./public"
+  },
+  // No workers.dev / preview URLs: those would bypass Cloudflare Access.
+  // The app must only be reachable via the custom domain, where Access enforces auth.
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [
+    { "pattern": "rental.ashwinmalkani.dev", "custom_domain": true }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "villa-ticino-tracker",
+      "database_id": "40ec0039-a7ea-4098-938b-22f23d9953f3",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

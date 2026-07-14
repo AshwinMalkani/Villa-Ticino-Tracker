@@ -1,0 +1,13 @@
+# Dependencies
+node_modules/
+
+# Real financial data — never commit
+tracker.db
+tracker.db.*
+*.bak
+
+# Wrangler local state (includes local D1 with real data)
+.wrangler/
+
+# OS noise
+.DS_Store
