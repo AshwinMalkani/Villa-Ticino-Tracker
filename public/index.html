@@ -118,6 +118,7 @@
     </div>
     <div class="header-actions">
       <div class="db-status"><div class="db-dot" id="db-dot"></div><span id="db-status-text">Connected</span></div>
+      <select id="filter-year" style="width:auto;padding:8px 10px;font-size:13px" onchange="setYearFilter(this.value)"><option value="all">All years</option></select>
       <button class="btn" onclick="importJSON()">&#8679; Import JSON</button>
       <button class="btn primary" onclick="exportJSON()">&#8681; Export JSON</button>
       <input type="file" id="jsonImportInput" accept=".json" style="display:none" onchange="handleJSONImport(event)">
@@ -290,8 +291,32 @@ const CAT_COLORS = {
 };
 
 let transactions = [];
+let yearFilter = 'all';
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+
+// Filtered view for all rendering/exports; saving logic always uses the full list.
+function visibleTx() {
+  if (yearFilter === 'all') return transactions;
+  return transactions.filter(function(t) { return (t.date || '').slice(0, 4) === yearFilter; });
+}
+
+function rebuildYearFilter() {
+  var years = {};
+  transactions.forEach(function(t) { var y = (t.date || '').slice(0, 4); if (y) years[y] = 1; });
+  var list = Object.keys(years).sort().reverse();
+  if (yearFilter !== 'all' && list.indexOf(yearFilter) < 0) yearFilter = 'all';
+  var sel = document.getElementById('filter-year');
+  sel.innerHTML = '<option value="all">All years</option>' + list.map(function(y) { return '<option value="' + y + '">' + y + '</option>'; }).join('');
+  sel.value = yearFilter;
+}
+
+function setYearFilter(v) {
+  yearFilter = v;
+  renderDashboard();
+  renderTable();
+  renderTax();
+}
 
 function toast(msg) {
   var t = document.getElementById('toast');
@@ -339,6 +364,7 @@ async function addTransaction() {
   document.getElementById('f-desc').value = '';
   document.getElementById('f-notes').value = '';
   toast('Transaction saved.');
+  rebuildYearFilter();
   renderDashboard();
 }
 
@@ -346,6 +372,7 @@ async function deleteTransaction(id) {
   if (!confirm('Delete this transaction?')) return;
   await api('DELETE', '/api/transactions/' + id);
   transactions = transactions.filter(function(t) { return t.id !== id; });
+  rebuildYearFilter();
   renderTable();
   renderDashboard();
   toast('Deleted.');
@@ -388,6 +415,7 @@ async function saveEscrow() {
   }
   ['m-total','m-principal','m-interest','m-escrow'].forEach(function(f) { document.getElementById(f).value = ''; });
   document.getElementById('escrow-result').style.display = 'none';
+  rebuildYearFilter();
   renderDashboard();
   toast('Saved ' + items.length + ' escrow line items.');
 }
@@ -487,6 +515,7 @@ async function handleJSONImport(e) {
       if (confirm('Import ' + data.transactions.length + ' transactions? This replaces current data.')) {
         await api('POST', '/api/import', data);
         await loadAll();
+        rebuildYearFilter();
         renderDashboard();
         renderTable();
         toast('Imported ' + data.transactions.length + ' transactions.');
@@ -499,14 +528,14 @@ async function handleJSONImport(e) {
 
 async function exportCSV() {
   var header = 'Date,Description,Type,Category,Unit,Amount,Notes';
-  var rows = transactions.map(function(t) {
+  var rows = visibleTx().map(function(t) {
     return t.date + ',"' + (t.desc||t.description) + '",' + t.type + ',"' + (t.category||t.cat) + '",' + t.unit + ',' + t.amount + ',"' + (t.notes||'') + '"';
   });
   var blob = new Blob([[header].concat(rows).join('\n')], { type: 'text/csv' });
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a');
   a.href = url;
-  a.download = 'villa-ticino-schedule-e-' + new Date().toISOString().split('T')[0] + '.csv';
+  a.download = 'villa-ticino-schedule-e-' + (yearFilter === 'all' ? 'all-years' : yearFilter) + '-' + new Date().toISOString().split('T')[0] + '.csv';
   a.click();
   URL.revokeObjectURL(url);
   toast('CSV exported.');
@@ -535,6 +564,7 @@ async function handleCSV(e) {
       transactions.unshift(Object.assign({}, tx, { desc: tx.description }));
       added++;
     }
+    rebuildYearFilter();
     renderTable();
     renderDashboard();
     toast('Imported ' + added + ' transactions.');
@@ -561,7 +591,7 @@ updateCategories();
 
 function renderTable() {
   var filter = document.getElementById('filter-unit').value;
-  var list = transactions.slice().sort(function(a,b) { return b.date.localeCompare(a.date); });
+  var list = visibleTx().slice().sort(function(a,b) { return b.date.localeCompare(a.date); });
   if (filter !== 'all') list = list.filter(function(t) { return t.unit === filter; });
   var body = document.getElementById('tx-body');
   if (!list.length) { body.innerHTML = '<tr><td colspan="6"><div class="empty-state">No transactions yet.</div></td></tr>'; return; }
@@ -586,11 +616,12 @@ function renderTable() {
 var cfInst = null, expInst = null;
 
 function renderDashboard() {
-  var totalIncome = transactions.filter(function(t){return t.type==='income';}).reduce(function(s,t){return s+t.amount;},0);
-  var totalExpense = transactions.filter(function(t){return t.type==='expense';}).reduce(function(s,t){return s+t.amount;},0);
+  var txs = visibleTx();
+  var totalIncome = txs.filter(function(t){return t.type==='income';}).reduce(function(s,t){return s+t.amount;},0);
+  var totalExpense = txs.filter(function(t){return t.type==='expense';}).reduce(function(s,t){return s+t.amount;},0);
   var net = totalIncome - totalExpense;
-  var mainIncome = transactions.filter(function(t){return t.type==='income'&&t.unit==='main';}).reduce(function(s,t){return s+t.amount;},0);
-  var suiteIncome = transactions.filter(function(t){return t.type==='income'&&t.unit==='suite';}).reduce(function(s,t){return s+t.amount;},0);
+  var mainIncome = txs.filter(function(t){return t.type==='income'&&t.unit==='main';}).reduce(function(s,t){return s+t.amount;},0);
+  var suiteIncome = txs.filter(function(t){return t.type==='income'&&t.unit==='suite';}).reduce(function(s,t){return s+t.amount;},0);
 
   document.getElementById('metrics').innerHTML =
     '<div class="metric"><div class="metric-label">Total income</div><div class="metric-value green">$' + totalIncome.toLocaleString() + '</div></div>' +
@@ -600,7 +631,7 @@ function renderDashboard() {
     '<div class="metric"><div class="metric-label">In-law suite</div><div class="metric-value">$' + suiteIncome.toLocaleString() + '</div></div>';
 
   var months = {};
-  transactions.forEach(function(t) {
+  txs.forEach(function(t) {
     var m = t.date.slice(0,7);
     if (!months[m]) months[m] = { income: 0, expense: 0 };
     if (t.type==='income') months[m].income += t.amount;
@@ -629,7 +660,7 @@ function renderDashboard() {
   });
 
   var expByCat = {};
-  transactions.filter(function(t){return t.type==='expense';}).forEach(function(t) {
+  txs.filter(function(t){return t.type==='expense';}).forEach(function(t) {
     var c = t.category || t.cat;
     expByCat[c] = (expByCat[c]||0) + t.amount;
   });
@@ -657,15 +688,16 @@ function renderDashboard() {
 }
 
 function renderTax() {
+  var txs = visibleTx();
   var cats = {};
-  transactions.forEach(function(t) {
+  txs.forEach(function(t) {
     var c = t.category || t.cat;
     if (!cats[c]) cats[c] = { income: 0, expense: 0 };
     if (t.type==='income') cats[c].income += t.amount;
     else cats[c].expense += t.amount;
   });
-  var totalIncome = transactions.filter(function(t){return t.type==='income';}).reduce(function(s,t){return s+t.amount;},0);
-  var deductibleExpense = transactions.filter(function(t){return t.type==='expense' && NON_DEDUCTIBLE.indexOf(t.category||t.cat) < 0;}).reduce(function(s,t){return s+t.amount;},0);
+  var totalIncome = txs.filter(function(t){return t.type==='income';}).reduce(function(s,t){return s+t.amount;},0);
+  var deductibleExpense = txs.filter(function(t){return t.type==='expense' && NON_DEDUCTIBLE.indexOf(t.category||t.cat) < 0;}).reduce(function(s,t){return s+t.amount;},0);
   var net = totalIncome - deductibleExpense;
 
   var html = '<div class="schedule-row section-header"><span>Income</span><span></span></div>';
@@ -685,7 +717,13 @@ function renderTax() {
 
 document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
 document.getElementById('m-date').value = new Date().toISOString().split('T')[0];
-loadAll().then(function() { renderDashboard(); renderTable(); });
+loadAll().then(function() {
+  var cur = String(new Date().getFullYear());
+  if (transactions.some(function(t) { return (t.date || '').slice(0, 4) === cur; })) yearFilter = cur;
+  rebuildYearFilter();
+  renderDashboard();
+  renderTable();
+});
 </script>
 </body>
 </html>
