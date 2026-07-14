@@ -14,6 +14,7 @@
   },
   "devDependencies": {
     "pdfjs-dist": "^4.8.69",
+    "puppeteer-core": "^25.3.0",
     "wrangler": "^4.110.0"
   }
 }

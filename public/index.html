@@ -85,6 +85,28 @@
   .db-status { font-size: 11px; font-family: var(--mono); color: var(--muted); display: flex; align-items: center; gap: 6px; }
   .db-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
   .non-ded { font-size: 10px; color: var(--muted); font-family: var(--mono); margin-left: 4px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  canvas { max-width: 100%; max-height: 100%; }
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  @media (max-width: 700px) {
+    .app { padding: 16px 12px; }
+    .header { flex-direction: column; align-items: flex-start; gap: 12px; margin-bottom: 20px; padding-bottom: 16px; }
+    .header-actions { width: 100%; flex-wrap: wrap; }
+    .tabs { width: 100%; flex-wrap: wrap; }
+    .tab { flex: 1 1 auto; text-align: center; }
+    .grid-2 { grid-template-columns: 1fr; }
+    .form-row, .form-row-3 { grid-template-columns: 1fr; }
+    .two-col { grid-template-columns: 1fr; justify-items: center; }
+    .two-col > div:last-child { width: 100%; }
+    .metric-value { font-size: 20px; }
+    .table-wrap table { min-width: 620px; }
+    /* 16px inputs stop iOS Safari from auto-zooming on focus */
+    input, select { font-size: 16px; }
+    .toast { left: 12px; right: 12px; text-align: center; }
+    .split-label { width: 84px; }
+    .split-val { min-width: 64px; }
+  }
 </style>
 </head>
 <body>
@@ -120,7 +142,7 @@
         <span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:2px;background:#A0321E"></span><span style="color:var(--muted)">Expenses</span></span>
       </div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div class="grid-2">
       <div class="card">
         <div class="card-title">Expense breakdown</div>
         <div class="two-col">
@@ -153,16 +175,18 @@
           <option value="shared">Shared</option>
         </select>
       </div>
-      <table>
-        <thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Unit</th><th>Amount</th><th></th></tr></thead>
-        <tbody id="tx-body"></tbody>
-      </table>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Unit</th><th>Amount</th><th></th></tr></thead>
+          <tbody id="tx-body"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
   <!-- ADD -->
   <div id="page-add" class="page">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div class="grid-2">
       <div class="card">
         <div class="card-title">Add transaction</div>
         <div class="form-row">
