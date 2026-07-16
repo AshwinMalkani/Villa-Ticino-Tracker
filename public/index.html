@@ -130,12 +130,22 @@
     <button class="tab" onclick="switchTab('transactions', this)">Transactions</button>
     <button class="tab" onclick="switchTab('add', this)">Add entry</button>
     <button class="tab" onclick="switchTab('tax', this)">Tax summary</button>
+    <button class="tab" onclick="switchTab('docs', this)">Documents</button>
   </div>
 
   <!-- DASHBOARD -->
   <div id="page-dashboard" class="page active">
     <div id="quick-add" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px"></div>
     <div class="metric-grid" id="metrics"><div class="metric"><div class="metric-label">Loading...</div><div class="metric-value">--</div></div></div>
+    <div class="card">
+      <div class="card-title">Investment metrics</div>
+      <div class="metric-grid" id="stats-metrics" style="margin-bottom:12px"></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span class="form-label">Property value ($)</span>
+        <input type="number" id="s-value" style="width:140px;padding:6px 10px" placeholder="e.g. 758000">
+        <button class="btn" style="padding:6px 12px" onclick="savePropertyValue()">Save</button>
+      </div>
+    </div>
     <div class="card">
       <div class="card-title">Monthly cash flow</div>
       <div style="position:relative;width:100%;height:220px"><canvas id="cfChart" role="img" aria-label="Monthly income and expense bar chart"></canvas></div>
@@ -296,8 +306,36 @@
       <button class="btn" onclick="exportJSON()">&#8681; Export JSON backup</button>
     </div>
   </div>
+  <!-- DOCUMENTS -->
+  <div id="page-docs" class="page">
+    <div class="form-group" style="max-width:240px"><label class="form-label">Category for next upload</label>
+      <select id="doc-category">
+        <option value="mortgage">Mortgage</option>
+        <option value="utility">Utility bill</option>
+        <option value="receipt">Receipt</option>
+        <option value="insurance">Insurance</option>
+        <option value="tax">Tax</option>
+        <option value="other" selected>Other</option>
+      </select>
+    </div>
+    <div class="drop-zone" style="padding:20px" onclick="document.getElementById('docInput').click()">
+      <div style="font-weight:500;color:var(--text);margin-bottom:4px">&#8679; Upload document</div>
+      <div style="font-size:12px">Mortgage statements, utility bills, receipts, insurance &mdash; stored privately behind your login (max 15 MB)</div>
+      <input type="file" id="docInput" style="display:none" onclick="event.stopPropagation()" onchange="handleDocUpload(event)">
+    </div>
+    <div class="card">
+      <div class="card-title">All documents</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Name</th><th>Category</th><th>Size</th><th>Uploaded</th><th>Linked to</th><th></th></tr></thead>
+          <tbody id="doc-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 </div>
 
+<input type="file" id="attachInput" style="display:none" onchange="handleAttach(event)">
 <div class="toast" id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
@@ -339,6 +377,8 @@ const CAT_COLORS = {
 
 let transactions = [];
 let assets = [];
+let documents = [];
+let settings = {};
 let yearFilter = 'all';
 
 // Schedule E (Form 1040) line numbers for the CPA-facing summary
@@ -446,6 +486,119 @@ async function loadAll() {
     assets = await api('GET', '/api/assets');
     setDBStatus(true);
   } catch(e) { setDBStatus(false); }
+  // Docs/settings are optional (legacy local server has no R2) — don't flip DB status on failure
+  try { var rd = await fetch('/api/docs'); documents = rd.ok ? await rd.json() : []; } catch(e) { documents = []; }
+  try { var rs = await fetch('/api/settings'); settings = rs.ok ? await rs.json() : {}; } catch(e) { settings = {}; }
+}
+
+// --- Documents ---
+
+function fmtSize(b) { return b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB'; }
+
+async function uploadDocBlob(file, category, transactionId) {
+  var q = '?name=' + encodeURIComponent(file.name) + '&category=' + encodeURIComponent(category) +
+    (transactionId ? '&transaction_id=' + encodeURIComponent(transactionId) : '');
+  var r = await fetch('/api/docs' + q, { method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file });
+  var res = await r.json();
+  if (!r.ok) throw new Error(res.error || 'Upload failed');
+  documents.unshift(Object.assign({ uploaded_at: new Date().toISOString() }, res));
+  return res;
+}
+
+async function handleDocUpload(e) {
+  var file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  toast('Uploading...');
+  try {
+    await uploadDocBlob(file, document.getElementById('doc-category').value, null);
+    renderDocs();
+    toast('Uploaded.');
+  } catch(err) { toast(err.message || 'Upload failed.'); }
+}
+
+async function deleteDoc(id) {
+  if (!confirm('Delete this document?')) return;
+  await fetch('/api/docs/' + id, { method: 'DELETE' });
+  documents = documents.filter(function(d) { return d.id !== id; });
+  renderDocs();
+  renderTable();
+  toast('Deleted.');
+}
+
+function renderDocs() {
+  var body = document.getElementById('doc-body');
+  if (!documents.length) { body.innerHTML = '<tr><td colspan="6"><div class="empty-state">No documents yet.</div></td></tr>'; return; }
+  body.innerHTML = documents.map(function(d) {
+    var tx = d.transaction_id ? transactions.find(function(t) { return t.id === d.transaction_id; }) : null;
+    return '<tr>' +
+      '<td><a href="/api/docs/' + d.id + '" target="_blank" style="color:var(--blue)">' + d.name + '</a></td>' +
+      '<td><span class="badge badge-shared">' + d.category + '</span></td>' +
+      '<td style="font-family:var(--mono);font-size:12px">' + fmtSize(d.size) + '</td>' +
+      '<td style="font-family:var(--mono);font-size:12px">' + (d.uploaded_at || '').slice(0, 10) + '</td>' +
+      '<td style="font-size:12px;color:var(--muted)">' + (tx ? (tx.desc || tx.description || '') : '') + '</td>' +
+      '<td><button class="delete-btn" onclick="deleteDoc(\'' + d.id + '\')">&#x2715;</button></td>' +
+      '</tr>';
+  }).join('');
+}
+
+var attachTxId = null;
+function attachToTx(id) { attachTxId = id; document.getElementById('attachInput').click(); }
+
+async function handleAttach(e) {
+  var file = e.target.files[0];
+  e.target.value = '';
+  if (!file || !attachTxId) return;
+  toast('Uploading receipt...');
+  try {
+    await uploadDocBlob(file, 'receipt', attachTxId);
+    renderTable();
+    toast('Receipt attached.');
+  } catch(err) { toast(err.message || 'Upload failed.'); }
+  attachTxId = null;
+}
+
+// --- Investment metrics ---
+
+// Operating expenses exclude debt service and escrow impounds (but the actual
+// escrow-paid tax/insurance disbursements ARE operating expenses).
+var NON_OPERATING = ['Mortgage interest', 'Mortgage principal (non-deductible)', 'Escrow (property tax + insurance)'];
+
+function renderStats() {
+  var txs = visibleTx();
+  var income = txs.filter(function(t) { return t.type === 'income'; }).reduce(function(s, t) { return s + t.amount; }, 0);
+  var opEx = txs.filter(function(t) { return t.type === 'expense' && NON_OPERATING.indexOf(t.category || t.cat) < 0; }).reduce(function(s, t) { return s + t.amount; }, 0);
+  var noi = income - opEx;
+
+  var monthsSet = {};
+  txs.forEach(function(t) { monthsSet[t.date.slice(0, 7)] = 1; });
+  var n = Object.keys(monthsSet).length;
+  var cur = String(new Date().getFullYear());
+  var annualized = noi, note = '';
+  if ((yearFilter === cur || yearFilter === 'all') && n > 0 && n < 12) {
+    annualized = noi / n * 12;
+    note = ' <span style="font-size:10px;text-transform:none;letter-spacing:0">annualized</span>';
+  }
+
+  var pv = parseFloat(settings.property_value);
+  var capRate = pv > 0 ? (annualized / pv * 100) : null;
+
+  document.getElementById('stats-metrics').innerHTML =
+    '<div class="metric"><div class="metric-label">NOI' + note + '</div><div class="metric-value ' + (annualized >= 0 ? 'green' : 'red') + '">$' + money(cents(annualized)) + '</div></div>' +
+    '<div class="metric"><div class="metric-label">Cap rate</div><div class="metric-value">' + (capRate != null ? capRate.toFixed(2) + '%' : '--') + '</div></div>' +
+    '<div class="metric"><div class="metric-label">Operating expenses' + note + '</div><div class="metric-value red">$' + money(cents(n > 0 && n < 12 && (yearFilter === cur || yearFilter === 'all') ? opEx / n * 12 : opEx)) + '</div></div>';
+}
+
+async function savePropertyValue() {
+  var v = cents(parseFloat(document.getElementById('s-value').value));
+  if (!v) { toast('Enter a property value.'); return; }
+  try {
+    var r = await fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ property_value: v }) });
+    if (!r.ok) throw new Error();
+    settings.property_value = String(v);
+    renderStats();
+    toast('Property value saved.');
+  } catch(e) { toast('Could not save.'); }
 }
 
 async function addAsset() {
@@ -696,6 +849,7 @@ async function handleStatementPDF(e) {
     '\n\nLog these 3 line items?';
   if (confirm(msg)) {
     await saveEscrow();
+    try { await uploadDocBlob(file, 'mortgage', null); } catch(err) { /* archive is best-effort */ }
   } else {
     toast('Loaded into the splitter — review and save when ready.');
   }
@@ -807,6 +961,7 @@ function switchTab(t, btn) {
   if (t === 'dashboard') renderDashboard();
   if (t === 'transactions') renderTable();
   if (t === 'tax') renderTax();
+  if (t === 'docs') renderDocs();
 }
 
 function updateCategories() {
@@ -835,7 +990,12 @@ function renderTable() {
       '<td><span class="badge" style="background:' + catColor + '22;color:' + catColor + '">' + cat + (isNonDed ? ' <span style="opacity:0.6">*</span>' : '') + '</span></td>' +
       '<td><span class="badge ' + unitBadge + '">' + unitLabel + '</span></td>' +
       '<td class="' + (t.type==='income'?'tx-pos':'tx-neg') + '">' + (t.type==='income'?'+':'-') + '$' + money(t.amount) + (isNonDed ? '<span class="non-ded">non-deductible</span>' : isNonCash ? '<span class="non-ded">from escrow</span>' : '') + '</td>' +
-      '<td style="white-space:nowrap"><button class="delete-btn" title="Edit" onclick="editTransaction(\'' + t.id + '\')">&#9998;</button><button class="delete-btn" title="Delete" onclick="deleteTransaction(\'' + t.id + '\')">&#x2715;</button></td>' +
+      '<td style="white-space:nowrap">' + (function() {
+        var doc = documents.find(function(d) { return d.transaction_id === t.id; });
+        return doc
+          ? '<a class="delete-btn" title="View attachment" href="/api/docs/' + doc.id + '" target="_blank" style="text-decoration:none">&#128206;</a>'
+          : '<button class="delete-btn" title="Attach receipt" style="opacity:0.4" onclick="attachToTx(\'' + t.id + '\')">&#128206;</button>';
+      })() + '<button class="delete-btn" title="Edit" onclick="editTransaction(\'' + t.id + '\')">&#9998;</button><button class="delete-btn" title="Delete" onclick="deleteTransaction(\'' + t.id + '\')">&#x2715;</button></td>' +
       '</tr>';
   }).join('');
 }
@@ -844,6 +1004,7 @@ var cfInst = null, expInst = null;
 
 function renderDashboard() {
   renderQuickAdd();
+  renderStats();
   var txs = visibleTx();
   // Dashboard is a cash view: escrow disbursements are deductible but not cash events.
   var isCash = function(t){ return NON_CASH.indexOf(t.category||t.cat) < 0; };
@@ -962,6 +1123,7 @@ loadAll().then(function() {
   var cur = String(new Date().getFullYear());
   if (transactions.some(function(t) { return (t.date || '').slice(0, 4) === cur; })) yearFilter = cur;
   rebuildYearFilter();
+  if (settings.property_value) document.getElementById('s-value').value = settings.property_value;
   renderDashboard();
   renderTable();
 });

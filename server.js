@@ -49,6 +49,11 @@ async function initDB() {
   )`);
   try { db.run('ALTER TABLE assets ADD COLUMN month INTEGER DEFAULT 1'); } catch (e) { /* column already exists */ }
 
+  db.run(`CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT
+  )`);
+
   saveToDisk();
 }
 
@@ -136,6 +141,22 @@ app.post('/api/assets', (req, res) => {
 
 app.delete('/api/assets/:id', (req, res) => {
   db.run('DELETE FROM assets WHERE id = ?', [req.params.id]);
+  saveToDisk();
+  res.json({ ok: true });
+});
+
+// --- Settings ---
+
+app.get('/api/settings', (req, res) => {
+  const result = db.exec('SELECT key, value FROM settings');
+  if (!result.length) return res.json({});
+  res.json(Object.fromEntries(result[0].values));
+});
+
+app.put('/api/settings', (req, res) => {
+  for (const [k, v] of Object.entries(req.body)) {
+    db.run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', [k, String(v)]);
+  }
   saveToDisk();
   res.json({ ok: true });
 });
