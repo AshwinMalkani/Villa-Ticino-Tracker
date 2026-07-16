@@ -222,7 +222,7 @@
           <div style="font-size:12px">Principal, interest &amp; escrow are read automatically</div>
           <input type="file" id="pdfInput" accept=".pdf,application/pdf" style="display:none" onclick="event.stopPropagation()" onchange="handleStatementPDF(event)">
         </div>
-        <div style="font-size:12px;color:var(--muted);margin-bottom:16px;font-family:var(--mono)">Saves all 4 line items including principal for cash flow tracking. Only deductible items appear on Schedule E.</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:16px;font-family:var(--mono)">Saves all line items for cash flow tracking. Only interest is deductible now &mdash; escrow becomes deductible when the servicer pays tax/insurance (record below).</div>
         <div class="form-row">
           <div class="form-group"><label class="form-label">Total escrow payment ($)</label><input type="number" id="m-total" placeholder="e.g. 4086.01" oninput="calcEscrow()"></div>
           <div class="form-group"><label class="form-label">Principal ($)</label><input type="number" id="m-principal" placeholder="e.g. 648.06" oninput="calcEscrow()"></div>
@@ -233,19 +233,35 @@
         </div>
         <div class="escrow-result" id="escrow-result">
           <span><span class="ml">Interest <span style="color:var(--green)">(deductible)</span></span><span class="mv green" id="e-int">--</span></span>
-          <span><span class="ml">Escrow <span style="color:var(--green)">(deductible)</span></span><span class="mv green" id="e-escrow">--</span></span>
+          <span><span class="ml">Escrow <span style="color:var(--muted)">(deductible when disbursed)</span></span><span class="mv muted" id="e-escrow">--</span></span>
           <span><span class="ml">Principal <span style="color:var(--muted)">(not deductible)</span></span><span class="mv muted" id="e-prin">--</span></span>
           <span><span class="ml">Unallocated</span><span class="mv muted" id="e-unalloc">--</span></span>
         </div>
         <div class="form-group" style="margin-top:4px"><label class="form-label">Date</label><input type="date" id="m-date"></div>
         <button class="btn primary" style="width:100%;margin-top:4px" onclick="saveEscrow()">Save escrow breakdown</button>
       </div>
+
+      <div class="card">
+        <div class="card-title">Escrow disbursement (year-end actuals)</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:16px;font-family:var(--mono)">When the servicer pays property tax or insurance out of escrow, record it here &mdash; these are the amounts that are actually deductible (see your annual escrow statement / Form 1098). Not counted in cash flow: the cash already left when you paid into escrow.</div>
+        <div class="form-row-3">
+          <div class="form-group"><label class="form-label">Paid to</label>
+            <select id="d-type">
+              <option value="Property tax (paid from escrow)">Property tax</option>
+              <option value="Insurance (paid from escrow)">Insurance</option>
+            </select>
+          </div>
+          <div class="form-group"><label class="form-label">Amount ($)</label><input type="number" id="d-amount" placeholder="0.00" min="0" step="0.01"></div>
+          <div class="form-group"><label class="form-label">Date</label><input type="date" id="d-date"></div>
+        </div>
+        <button class="btn primary" style="width:100%" onclick="saveDisbursement()">Record disbursement</button>
+      </div>
     </div>
   </div>
 
   <!-- TAX -->
   <div id="page-tax" class="page">
-    <div class="notice">Deductible expenses only. Principal is excluded from Schedule E.</div>
+    <div class="notice">Deductible expenses only. Principal and escrow contributions are excluded &mdash; property tax &amp; insurance count when paid out of escrow (record on the Add entry tab).</div>
     <div class="card">
       <div class="card-title">Schedule E &mdash; rental income &amp; expenses</div>
       <div id="schedule-e"></div>
@@ -267,14 +283,20 @@
 </script>
 <script>
 const INCOME_CATS = ['Rent - main unit','Rent - in-law suite','Late fee','Security deposit kept','Other income'];
-const EXPENSE_CATS = ['Mortgage interest','Escrow (property tax + insurance)','Mortgage principal (non-deductible)','Property tax','Insurance','Utilities','Repairs & maintenance','Appliance (Section 179)','Solar/energy','Advertising','Mileage','Professional fees','Other expense'];
-const NON_DEDUCTIBLE = ['Mortgage principal (non-deductible)'];
+const EXPENSE_CATS = ['Mortgage interest','Escrow (property tax + insurance)','Mortgage principal (non-deductible)','Property tax','Property tax (paid from escrow)','Insurance','Insurance (paid from escrow)','Utilities','Repairs & maintenance','Appliance (Section 179)','Solar/energy','Advertising','Mileage','Professional fees','Other expense'];
+// Escrow contributions are deposits into your own escrow account — the deduction
+// happens when the servicer disburses tax/insurance, recorded via the categories below.
+const NON_DEDUCTIBLE = ['Mortgage principal (non-deductible)','Escrow (property tax + insurance)'];
+// Deductible but not a cash event (the cash left when it was paid into escrow).
+const NON_CASH = ['Property tax (paid from escrow)','Insurance (paid from escrow)'];
 const CAT_COLORS = {
   'Mortgage interest':'#378ADD',
   'Escrow (property tax + insurance)':'#B05EA0',
   'Mortgage principal (non-deductible)':'#B4B2A9',
   'Property tax':'#D4537E',
+  'Property tax (paid from escrow)':'#A85E96',
   'Insurance':'#1D9E75',
+  'Insurance (paid from escrow)':'#2E8B8B',
   'Utilities':'#BA7517',
   'Repairs & maintenance':'#E24B4A',
   'Appliance (Section 179)':'#534AB7',
@@ -490,6 +512,21 @@ async function handleStatementPDF(e) {
   }
 }
 
+async function saveDisbursement() {
+  var cat = document.getElementById('d-type').value;
+  var a = parseFloat(document.getElementById('d-amount').value);
+  var d = document.getElementById('d-date').value;
+  if (!a || !d) { toast('Enter amount and date.'); return; }
+  var desc = cat.indexOf('Property tax') === 0 ? 'Property tax paid from escrow' : 'Insurance paid from escrow';
+  var tx = { id: uid(), date: d, description: desc, type: 'expense', category: cat, unit: 'shared', amount: a, notes: 'Escrow disbursement' };
+  await api('POST', '/api/transactions', tx);
+  transactions.unshift(Object.assign({}, tx, { desc: tx.description }));
+  document.getElementById('d-amount').value = '';
+  rebuildYearFilter();
+  renderDashboard();
+  toast('Disbursement recorded.');
+}
+
 async function exportJSON() {
   var data = await api('GET', '/api/export');
   var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -602,12 +639,13 @@ function renderTable() {
     var unitLabel = t.unit==='main' ? 'Main' : t.unit==='suite' ? 'Suite' : 'Shared';
     var catColor = CAT_COLORS[cat] || '#888';
     var isNonDed = NON_DEDUCTIBLE.indexOf(cat) >= 0;
+    var isNonCash = NON_CASH.indexOf(cat) >= 0;
     return '<tr>' +
       '<td style="font-family:var(--mono);font-size:12px">' + t.date + '</td>' +
       '<td>' + desc + (t.notes ? '<div style="font-size:11px;color:var(--muted)">' + t.notes + '</div>' : '') + '</td>' +
       '<td><span class="badge" style="background:' + catColor + '22;color:' + catColor + '">' + cat + (isNonDed ? ' <span style="opacity:0.6">*</span>' : '') + '</span></td>' +
       '<td><span class="badge ' + unitBadge + '">' + unitLabel + '</span></td>' +
-      '<td class="' + (t.type==='income'?'tx-pos':'tx-neg') + '">' + (t.type==='income'?'+':'-') + '$' + t.amount.toLocaleString() + (isNonDed ? '<span class="non-ded">equity</span>' : '') + '</td>' +
+      '<td class="' + (t.type==='income'?'tx-pos':'tx-neg') + '">' + (t.type==='income'?'+':'-') + '$' + t.amount.toLocaleString() + (isNonDed ? '<span class="non-ded">non-deductible</span>' : isNonCash ? '<span class="non-ded">from escrow</span>' : '') + '</td>' +
       '<td><button class="delete-btn" onclick="deleteTransaction(\'' + t.id + '\')">&#x2715;</button></td>' +
       '</tr>';
   }).join('');
@@ -617,8 +655,10 @@ var cfInst = null, expInst = null;
 
 function renderDashboard() {
   var txs = visibleTx();
+  // Dashboard is a cash view: escrow disbursements are deductible but not cash events.
+  var isCash = function(t){ return NON_CASH.indexOf(t.category||t.cat) < 0; };
   var totalIncome = txs.filter(function(t){return t.type==='income';}).reduce(function(s,t){return s+t.amount;},0);
-  var totalExpense = txs.filter(function(t){return t.type==='expense';}).reduce(function(s,t){return s+t.amount;},0);
+  var totalExpense = txs.filter(function(t){return t.type==='expense' && isCash(t);}).reduce(function(s,t){return s+t.amount;},0);
   var net = totalIncome - totalExpense;
   var mainIncome = txs.filter(function(t){return t.type==='income'&&t.unit==='main';}).reduce(function(s,t){return s+t.amount;},0);
   var suiteIncome = txs.filter(function(t){return t.type==='income'&&t.unit==='suite';}).reduce(function(s,t){return s+t.amount;},0);
@@ -635,7 +675,7 @@ function renderDashboard() {
     var m = t.date.slice(0,7);
     if (!months[m]) months[m] = { income: 0, expense: 0 };
     if (t.type==='income') months[m].income += t.amount;
-    else months[m].expense += t.amount;
+    else if (isCash(t)) months[m].expense += t.amount;
   });
   var labels = Object.keys(months).sort();
 
@@ -660,7 +700,7 @@ function renderDashboard() {
   });
 
   var expByCat = {};
-  txs.filter(function(t){return t.type==='expense';}).forEach(function(t) {
+  txs.filter(function(t){return t.type==='expense' && isCash(t);}).forEach(function(t) {
     var c = t.category || t.cat;
     expByCat[c] = (expByCat[c]||0) + t.amount;
   });
@@ -717,6 +757,7 @@ function renderTax() {
 
 document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
 document.getElementById('m-date').value = new Date().toISOString().split('T')[0];
+document.getElementById('d-date').value = new Date().toISOString().split('T')[0];
 loadAll().then(function() {
   var cur = String(new Date().getFullYear());
   if (transactions.some(function(t) { return (t.date || '').slice(0, 4) === cur; })) yearFilter = cur;
