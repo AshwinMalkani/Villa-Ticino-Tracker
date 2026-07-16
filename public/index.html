@@ -139,7 +139,8 @@
     <div class="metric-grid" id="metrics"><div class="metric"><div class="metric-label">Loading...</div><div class="metric-value">--</div></div></div>
     <div class="card">
       <div class="card-title">Investment metrics</div>
-      <div class="metric-grid" id="stats-metrics" style="margin-bottom:12px"></div>
+      <div class="metric-grid" id="stats-metrics" style="margin-bottom:8px"></div>
+      <div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-bottom:12px">NOI excludes debt service, escrow contributions, and capital expenditures.</div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <span class="form-label">Property value ($)</span>
         <input type="number" id="s-value" style="width:140px;padding:6px 10px" placeholder="e.g. 758000">
@@ -611,11 +612,16 @@ async function handleAttach(e) {
 // Operating expenses exclude debt service and escrow impounds (but the actual
 // escrow-paid tax/insurance disbursements ARE operating expenses).
 var NON_OPERATING = ['Mortgage interest', 'Mortgage principal (non-deductible)', 'Escrow (property tax + insurance)'];
+// Capital expenditures sit below NOI — they are not recurring operating costs.
+var CAPEX = ['Appliance (Section 179)', 'Solar/energy'];
 
 function renderStats() {
   var txs = visibleTx();
   var income = txs.filter(function(t) { return t.type === 'income'; }).reduce(function(s, t) { return s + t.amount; }, 0);
-  var opEx = txs.filter(function(t) { return t.type === 'expense' && NON_OPERATING.indexOf(t.category || t.cat) < 0; }).reduce(function(s, t) { return s + t.amount; }, 0);
+  var opEx = txs.filter(function(t) {
+    var c = t.category || t.cat;
+    return t.type === 'expense' && NON_OPERATING.indexOf(c) < 0 && CAPEX.indexOf(c) < 0;
+  }).reduce(function(s, t) { return s + t.amount; }, 0);
   var noi = income - opEx;
 
   var monthsSet = {};
@@ -625,7 +631,7 @@ function renderStats() {
   var annualized = noi, note = '';
   if ((yearFilter === cur || yearFilter === 'all') && n > 0 && n < 12) {
     annualized = noi / n * 12;
-    note = ' <span style="font-size:10px;text-transform:none;letter-spacing:0">annualized</span>';
+    note = ' <span style="font-size:10px;text-transform:none;letter-spacing:0">annualized from ' + n + ' month' + (n === 1 ? '' : 's') + '</span>';
   }
 
   var pv = parseFloat(settings.property_value);
