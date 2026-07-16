@@ -500,6 +500,21 @@ async function loadAll() {
 
 function fmtSize(b) { return b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB'; }
 
+var DOC_CATS = ['mortgage', 'utility', 'receipt', 'insurance', 'tax', 'other'];
+
+async function updateDocCategory(id, category) {
+  try {
+    var r = await fetch('/api/docs/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ category: category }) });
+    if (!r.ok) throw new Error();
+    var d = documents.find(function(x) { return x.id === id; });
+    if (d) d.category = category;
+    toast('Category updated.');
+  } catch(e) {
+    toast('Could not update category.');
+    renderDocs();
+  }
+}
+
 async function uploadDocBlob(file, category, transactionId) {
   var q = '?name=' + encodeURIComponent(file.name) + '&category=' + encodeURIComponent(category) +
     (transactionId ? '&transaction_id=' + encodeURIComponent(transactionId) : '');
@@ -538,7 +553,9 @@ function renderDocs() {
     var tx = d.transaction_id ? transactions.find(function(t) { return t.id === d.transaction_id; }) : null;
     return '<tr>' +
       '<td><a href="/api/docs/' + d.id + '" target="_blank" style="color:var(--blue)">' + d.name + '</a></td>' +
-      '<td><span class="badge badge-shared">' + d.category + '</span></td>' +
+      '<td><select style="width:110px;padding:4px 8px;font-size:12px" onchange="updateDocCategory(\'' + d.id + '\', this.value)">' +
+        DOC_CATS.map(function(c) { return '<option value="' + c + '"' + (c === d.category ? ' selected' : '') + '>' + c + '</option>'; }).join('') +
+      '</select></td>' +
       '<td style="font-family:var(--mono);font-size:12px">' + fmtSize(d.size) + '</td>' +
       '<td style="font-family:var(--mono);font-size:12px">' + (d.uploaded_at || '').slice(0, 10) + '</td>' +
       '<td style="font-size:12px;color:var(--muted)">' + (tx ? (tx.desc || tx.description || '') : '') + '</td>' +

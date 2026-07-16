@@ -121,6 +121,16 @@ export default {
         });
       }
 
+      if (docMatch && method === 'PUT') {
+        const { category } = await request.json();
+        if (!category || typeof category !== 'string' || category.length > 40) {
+          return json({ error: 'Invalid category' }, 400);
+        }
+        await env.DB.prepare('UPDATE documents SET category = ? WHERE id = ?')
+          .bind(category, decodeURIComponent(docMatch[1])).run();
+        return json({ ok: true });
+      }
+
       if (docMatch && method === 'DELETE') {
         const id = decodeURIComponent(docMatch[1]);
         const row = await env.DB.prepare('SELECT * FROM documents WHERE id = ?').bind(id).first();
