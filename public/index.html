@@ -303,6 +303,7 @@
     </div>
     <div style="display:flex;gap:10px;margin-top:4px">
       <button class="btn primary" onclick="exportCSV()">&#8681; Export CSV for CPA</button>
+      <button class="btn" onclick="exportDocsZip()">&#8681; Download documents (.zip)</button>
       <button class="btn" onclick="exportJSON()">&#8681; Export JSON backup</button>
     </div>
   </div>
@@ -324,7 +325,10 @@
       <input type="file" id="docInput" style="display:none" onclick="event.stopPropagation()" onchange="handleDocUpload(event)">
     </div>
     <div class="card">
-      <div class="card-title">All documents</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <div class="card-title" style="margin-bottom:0">All documents</div>
+        <button class="btn" onclick="exportDocsZip()">&#8681; Download all (.zip)</button>
+      </div>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Name</th><th>Category</th><th>Size</th><th>Uploaded</th><th>Linked to</th><th></th></tr></thead>
@@ -339,6 +343,7 @@
 <div class="toast" id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script type="module">
   import * as pdfjsLib from 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.min.mjs';
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.worker.min.mjs';
@@ -540,6 +545,32 @@ function renderDocs() {
       '<td><button class="delete-btn" onclick="deleteDoc(\'' + d.id + '\')">&#x2715;</button></td>' +
       '</tr>';
   }).join('');
+}
+
+async function exportDocsZip() {
+  if (!documents.length) { toast('No documents to export.'); return; }
+  toast('Preparing zip (' + documents.length + ' files)...');
+  try {
+    var zip = new JSZip();
+    var used = {};
+    for (var i = 0; i < documents.length; i++) {
+      var d = documents[i];
+      var r = await fetch('/api/docs/' + d.id);
+      if (!r.ok) throw new Error('Could not download ' + d.name);
+      var name = d.category + '/' + d.name;
+      if (used[name]) name = d.category + '/' + d.id + '-' + d.name;
+      used[name] = 1;
+      zip.file(name, await r.arrayBuffer());
+    }
+    var blob = await zip.generateAsync({ type: 'blob' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'villa-ticino-documents-' + new Date().toISOString().split('T')[0] + '.zip';
+    a.click();
+    URL.revokeObjectURL(url);
+    toast('Exported ' + documents.length + ' documents.');
+  } catch(e) { toast((e && e.message) || 'Zip export failed.'); }
 }
 
 var attachTxId = null;
