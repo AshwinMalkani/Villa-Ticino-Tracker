@@ -134,6 +134,7 @@
 
   <!-- DASHBOARD -->
   <div id="page-dashboard" class="page active">
+    <div id="quick-add" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px"></div>
     <div class="metric-grid" id="metrics"><div class="metric"><div class="metric-label">Loading...</div><div class="metric-value">--</div></div></div>
     <div class="card">
       <div class="card-title">Monthly cash flow</div>
@@ -189,7 +190,7 @@
   <div id="page-add" class="page">
     <div class="grid-2">
       <div class="card">
-        <div class="card-title">Add transaction</div>
+        <div class="card-title" id="add-tx-title">Add transaction</div>
         <div class="form-row">
           <div class="form-group"><label class="form-label">Date</label><input type="date" id="f-date"></div>
           <div class="form-group"><label class="form-label">Amount ($)</label><input type="number" id="f-amount" placeholder="0.00" min="0" step="0.01"></div>
@@ -212,7 +213,10 @@
           </select>
         </div>
         <div class="form-group"><label class="form-label">Notes (optional)</label><input type="text" id="f-notes" placeholder="e.g. receipt #1234"></div>
-        <button class="btn primary" style="width:100%" onclick="addTransaction()">Add transaction</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn primary" style="flex:1" id="add-tx-btn" onclick="addTransaction()">Add transaction</button>
+          <button class="btn" id="cancel-edit" style="display:none" onclick="cancelEdit()">Cancel</button>
+        </div>
       </div>
 
       <div class="card">
@@ -383,6 +387,9 @@ function depreciationTotal(Y) {
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
 
+function money(n) { return Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function cents(n) { return Math.round(n * 100) / 100; }
+
 // Filtered view for all rendering/exports; saving logic always uses the full list.
 function visibleTx() {
   if (yearFilter === 'all') return transactions;
@@ -443,7 +450,7 @@ async function loadAll() {
 
 async function addAsset() {
   var item = document.getElementById('a-item').value.trim();
-  var cost = parseFloat(document.getElementById('a-cost').value);
+  var cost = cents(parseFloat(document.getElementById('a-cost').value));
   var month = parseInt(document.getElementById('a-month').value, 10);
   var year = parseInt(document.getElementById('a-year').value, 10);
   if (!item || !cost || !year) { toast('Fill in item, cost, and year.'); return; }
@@ -475,28 +482,101 @@ function renderAssets() {
     var dep = assetDepreciationForYear(a, depYear);
     return '<tr>' +
       '<td>' + a.item + '</td>' +
-      '<td style="font-family:var(--mono)">$' + a.cost.toLocaleString() + '</td>' +
+      '<td style="font-family:var(--mono)">$' + money(a.cost) + '</td>' +
       '<td style="font-family:var(--mono);font-size:12px">' + MONTH_NAMES[(a.month || 1) - 1] + ' ' + a.year + '</td>' +
-      '<td class="tx-neg">' + (dep > 0 ? '($' + dep.toLocaleString(undefined, { maximumFractionDigits: 2 }) + ')' : '--') + '</td>' +
+      '<td class="tx-neg">' + (dep > 0 ? '($' + money(dep) + ')' : '--') + '</td>' +
       '<td><button class="delete-btn" onclick="deleteAsset(\'' + a.id + '\')">&#x2715;</button></td>' +
       '</tr>';
   }).join('');
 }
 
+var editingId = null;
+
 async function addTransaction() {
   var d = document.getElementById('f-date').value;
-  var a = parseFloat(document.getElementById('f-amount').value);
+  var a = cents(parseFloat(document.getElementById('f-amount').value));
   var desc = document.getElementById('f-desc').value.trim();
   if (!d || !a || !desc) { toast('Fill in date, amount, and description.'); return; }
-  var tx = { id: uid(), date: d, description: desc, type: document.getElementById('f-type').value, category: document.getElementById('f-cat').value, unit: document.getElementById('f-unit').value, amount: a, notes: document.getElementById('f-notes').value };
-  await api('POST', '/api/transactions', tx);
-  transactions.unshift(Object.assign({}, tx, { desc: tx.description }));
+  var tx = { id: editingId || uid(), date: d, description: desc, type: document.getElementById('f-type').value, category: document.getElementById('f-cat').value, unit: document.getElementById('f-unit').value, amount: a, notes: document.getElementById('f-notes').value };
+  if (editingId) {
+    await api('PUT', '/api/transactions/' + editingId, tx);
+    var i = transactions.findIndex(function(t) { return t.id === editingId; });
+    if (i >= 0) transactions[i] = Object.assign({}, transactions[i], tx, { desc: tx.description });
+    cancelEdit();
+    toast('Transaction updated.');
+  } else {
+    await api('POST', '/api/transactions', tx);
+    transactions.unshift(Object.assign({}, tx, { desc: tx.description }));
+    document.getElementById('f-amount').value = '';
+    document.getElementById('f-desc').value = '';
+    document.getElementById('f-notes').value = '';
+    toast('Transaction saved.');
+  }
+  rebuildYearFilter();
+  renderDashboard();
+  renderTable();
+}
+
+function editTransaction(id) {
+  var t = transactions.find(function(x) { return x.id === id; });
+  if (!t) return;
+  editingId = id;
+  document.getElementById('f-date').value = t.date;
+  document.getElementById('f-amount').value = t.amount;
+  document.getElementById('f-desc').value = t.desc || t.description || '';
+  document.getElementById('f-type').value = t.type;
+  updateCategories();
+  document.getElementById('f-cat').value = t.category || t.cat || '';
+  document.getElementById('f-unit').value = t.unit;
+  document.getElementById('f-notes').value = t.notes || '';
+  document.getElementById('add-tx-title').textContent = 'Edit transaction';
+  document.getElementById('add-tx-btn').textContent = 'Save changes';
+  document.getElementById('cancel-edit').style.display = 'inline-flex';
+  switchTab('add', document.querySelectorAll('.tab')[2]);
+}
+
+function cancelEdit() {
+  editingId = null;
   document.getElementById('f-amount').value = '';
   document.getElementById('f-desc').value = '';
   document.getElementById('f-notes').value = '';
-  toast('Transaction saved.');
+  document.getElementById('add-tx-title').textContent = 'Add transaction';
+  document.getElementById('add-tx-btn').textContent = 'Add transaction';
+  document.getElementById('cancel-edit').style.display = 'none';
+}
+
+var RENT_UNITS = [
+  { unit: 'main', cat: 'Rent - main unit', label: 'Main unit' },
+  { unit: 'suite', cat: 'Rent - in-law suite', label: 'In-law suite' }
+];
+
+function lastRent(cat) {
+  return transactions
+    .filter(function(t) { return (t.category || t.cat) === cat && t.type === 'income'; })
+    .sort(function(a, b) { return b.date.localeCompare(a.date); })[0];
+}
+
+function renderQuickAdd() {
+  document.getElementById('quick-add').innerHTML = RENT_UNITS.map(function(u) {
+    var last = lastRent(u.cat);
+    if (!last) return '';
+    return '<button class="btn" onclick="quickLogRent(\'' + u.unit + '\')">+ ' + u.label + ' rent &mdash; $' + money(last.amount) + '</button>';
+  }).join('');
+}
+
+async function quickLogRent(unit) {
+  var u = RENT_UNITS.find(function(x) { return x.unit === unit; });
+  var last = lastRent(u.cat);
+  if (!last) return;
+  var today = new Date().toISOString().split('T')[0];
+  var alreadyThisMonth = transactions.some(function(t) { return (t.category || t.cat) === u.cat && t.date.slice(0, 7) === today.slice(0, 7); });
+  if (alreadyThisMonth && !confirm(u.label + ' rent is already logged this month. Log it again?')) return;
+  var tx = { id: uid(), date: today, description: u.label + ' rent', type: 'income', category: u.cat, unit: u.unit, amount: last.amount, notes: '' };
+  await api('POST', '/api/transactions', tx);
+  transactions.unshift(Object.assign({}, tx, { desc: tx.description }));
   rebuildYearFilter();
   renderDashboard();
+  toast('Logged $' + money(last.amount) + ' — ' + u.label + ' rent.');
 }
 
 async function deleteTransaction(id) {
@@ -526,10 +606,10 @@ function calcEscrow() {
 }
 
 async function saveEscrow() {
-  var total = parseFloat(document.getElementById('m-total').value) || 0;
-  var principal = parseFloat(document.getElementById('m-principal').value) || 0;
-  var interest = parseFloat(document.getElementById('m-interest').value) || 0;
-  var escrow = parseFloat(document.getElementById('m-escrow').value) || 0;
+  var total = cents(parseFloat(document.getElementById('m-total').value)) || 0;
+  var principal = cents(parseFloat(document.getElementById('m-principal').value)) || 0;
+  var interest = cents(parseFloat(document.getElementById('m-interest').value)) || 0;
+  var escrow = cents(parseFloat(document.getElementById('m-escrow').value)) || 0;
   var d = document.getElementById('m-date').value || new Date().toISOString().split('T')[0];
   if (!total) { toast('Enter total escrow payment.'); return; }
   if (!interest && !escrow && !principal) { toast('Enter at least one line item.'); return; }
@@ -623,7 +703,7 @@ async function handleStatementPDF(e) {
 
 async function saveDisbursement() {
   var cat = document.getElementById('d-type').value;
-  var a = parseFloat(document.getElementById('d-amount').value);
+  var a = cents(parseFloat(document.getElementById('d-amount').value));
   var d = document.getElementById('d-date').value;
   if (!a || !d) { toast('Enter amount and date.'); return; }
   var desc = cat.indexOf('Property tax') === 0 ? 'Property tax paid from escrow' : 'Insurance paid from escrow';
@@ -675,7 +755,7 @@ async function handleJSONImport(e) {
 async function exportCSV() {
   var header = 'Date,Description,Type,Category,Unit,Amount,Notes';
   var rows = visibleTx().map(function(t) {
-    return t.date + ',"' + (t.desc||t.description) + '",' + t.type + ',"' + (t.category||t.cat) + '",' + t.unit + ',' + t.amount + ',"' + (t.notes||'') + '"';
+    return t.date + ',"' + (t.desc||t.description) + '",' + t.type + ',"' + (t.category||t.cat) + '",' + t.unit + ',' + Number(t.amount).toFixed(2) + ',"' + (t.notes||'') + '"';
   });
   var blob = new Blob([[header].concat(rows).join('\n')], { type: 'text/csv' });
   var url = URL.createObjectURL(blob);
@@ -754,8 +834,8 @@ function renderTable() {
       '<td>' + desc + (t.notes ? '<div style="font-size:11px;color:var(--muted)">' + t.notes + '</div>' : '') + '</td>' +
       '<td><span class="badge" style="background:' + catColor + '22;color:' + catColor + '">' + cat + (isNonDed ? ' <span style="opacity:0.6">*</span>' : '') + '</span></td>' +
       '<td><span class="badge ' + unitBadge + '">' + unitLabel + '</span></td>' +
-      '<td class="' + (t.type==='income'?'tx-pos':'tx-neg') + '">' + (t.type==='income'?'+':'-') + '$' + t.amount.toLocaleString() + (isNonDed ? '<span class="non-ded">non-deductible</span>' : isNonCash ? '<span class="non-ded">from escrow</span>' : '') + '</td>' +
-      '<td><button class="delete-btn" onclick="deleteTransaction(\'' + t.id + '\')">&#x2715;</button></td>' +
+      '<td class="' + (t.type==='income'?'tx-pos':'tx-neg') + '">' + (t.type==='income'?'+':'-') + '$' + money(t.amount) + (isNonDed ? '<span class="non-ded">non-deductible</span>' : isNonCash ? '<span class="non-ded">from escrow</span>' : '') + '</td>' +
+      '<td style="white-space:nowrap"><button class="delete-btn" title="Edit" onclick="editTransaction(\'' + t.id + '\')">&#9998;</button><button class="delete-btn" title="Delete" onclick="deleteTransaction(\'' + t.id + '\')">&#x2715;</button></td>' +
       '</tr>';
   }).join('');
 }
@@ -763,6 +843,7 @@ function renderTable() {
 var cfInst = null, expInst = null;
 
 function renderDashboard() {
+  renderQuickAdd();
   var txs = visibleTx();
   // Dashboard is a cash view: escrow disbursements are deductible but not cash events.
   var isCash = function(t){ return NON_CASH.indexOf(t.category||t.cat) < 0; };
@@ -773,11 +854,11 @@ function renderDashboard() {
   var suiteIncome = txs.filter(function(t){return t.type==='income'&&t.unit==='suite';}).reduce(function(s,t){return s+t.amount;},0);
 
   document.getElementById('metrics').innerHTML =
-    '<div class="metric"><div class="metric-label">Total income</div><div class="metric-value green">$' + totalIncome.toLocaleString() + '</div></div>' +
-    '<div class="metric"><div class="metric-label">Total expenses</div><div class="metric-value red">$' + totalExpense.toLocaleString() + '</div></div>' +
-    '<div class="metric"><div class="metric-label">Net cash flow</div><div class="metric-value ' + (net>=0?'green':'red') + '">$' + net.toLocaleString() + '</div></div>' +
-    '<div class="metric"><div class="metric-label">Main unit</div><div class="metric-value">$' + mainIncome.toLocaleString() + '</div></div>' +
-    '<div class="metric"><div class="metric-label">In-law suite</div><div class="metric-value">$' + suiteIncome.toLocaleString() + '</div></div>';
+    '<div class="metric"><div class="metric-label">Total income</div><div class="metric-value green">$' + money(totalIncome) + '</div></div>' +
+    '<div class="metric"><div class="metric-label">Total expenses</div><div class="metric-value red">$' + money(totalExpense) + '</div></div>' +
+    '<div class="metric"><div class="metric-label">Net cash flow</div><div class="metric-value ' + (net>=0?'green':'red') + '">$' + money(net) + '</div></div>' +
+    '<div class="metric"><div class="metric-label">Main unit</div><div class="metric-value">$' + money(mainIncome) + '</div></div>' +
+    '<div class="metric"><div class="metric-label">In-law suite</div><div class="metric-value">$' + money(suiteIncome) + '</div></div>';
 
   var months = {};
   txs.forEach(function(t) {
@@ -825,14 +906,14 @@ function renderDashboard() {
       options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, cutout: '65%' }
     });
     document.getElementById('exp-legend').innerHTML = expLabels.map(function(l,i) {
-      return '<div class="legend-item"><span class="legend-dot" style="background:' + expColors[i] + '"></span>' + l + '<span class="legend-val">$' + expVals[i].toLocaleString() + '</span></div>';
+      return '<div class="legend-item"><span class="legend-dot" style="background:' + expColors[i] + '"></span>' + l + '<span class="legend-val">$' + money(expVals[i]) + '</span></div>';
     }).join('');
   }
 
   var total = totalIncome || 1;
   document.getElementById('split-view').innerHTML =
-    '<div class="split-bar-wrap"><span class="split-label">Main unit</span><div class="split-bar"><div class="split-fill" style="width:' + Math.round(mainIncome/total*100) + '%;background:#378ADD"></div></div><span class="split-val">$' + mainIncome.toLocaleString() + '</span></div>' +
-    '<div class="split-bar-wrap"><span class="split-label">In-law suite</span><div class="split-bar"><div class="split-fill" style="width:' + Math.round(suiteIncome/total*100) + '%;background:#534AB7"></div></div><span class="split-val">$' + suiteIncome.toLocaleString() + '</span></div>' +
+    '<div class="split-bar-wrap"><span class="split-label">Main unit</span><div class="split-bar"><div class="split-fill" style="width:' + Math.round(mainIncome/total*100) + '%;background:#378ADD"></div></div><span class="split-val">$' + money(mainIncome) + '</span></div>' +
+    '<div class="split-bar-wrap"><span class="split-label">In-law suite</span><div class="split-bar"><div class="split-fill" style="width:' + Math.round(suiteIncome/total*100) + '%;background:#534AB7"></div></div><span class="split-val">$' + money(suiteIncome) + '</span></div>' +
     '<div style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:8px">Main ' + Math.round(mainIncome/total*100) + '% &middot; Suite ' + Math.round(suiteIncome/total*100) + '%</div>';
 }
 
@@ -857,17 +938,17 @@ function renderTax() {
 
   var html = '<div class="schedule-row section-header"><span>Income (line 3)</span><span></span></div>';
   INCOME_CATS.forEach(function(c) {
-    if (cats[c] && cats[c].income > 0) html += '<div class="schedule-row"><span>' + c + '</span><span style="font-family:var(--mono);color:var(--green)">$' + cats[c].income.toLocaleString() + '</span></div>';
+    if (cats[c] && cats[c].income > 0) html += '<div class="schedule-row"><span>' + c + '</span><span style="font-family:var(--mono);color:var(--green)">$' + money(cats[c].income) + '</span></div>';
   });
-  html += '<div class="schedule-row total"><span>Total income</span><span style="font-family:var(--mono);color:var(--green)">$' + totalIncome.toLocaleString() + '</span></div>';
+  html += '<div class="schedule-row total"><span>Total income</span><span style="font-family:var(--mono);color:var(--green)">$' + money(totalIncome) + '</span></div>';
   html += '<div class="schedule-row section-header"><span>Deductible expenses</span><span></span></div>';
   EXPENSE_CATS.forEach(function(c) {
     if (NON_DEDUCTIBLE.indexOf(c) >= 0) return;
-    if (cats[c] && cats[c].expense > 0) html += '<div class="schedule-row"><span>' + c + lineTag(c) + '</span><span style="font-family:var(--mono);color:var(--red)">($' + cats[c].expense.toLocaleString() + ')</span></div>';
+    if (cats[c] && cats[c].expense > 0) html += '<div class="schedule-row"><span>' + c + lineTag(c) + '</span><span style="font-family:var(--mono);color:var(--red)">($' + money(cats[c].expense) + ')</span></div>';
   });
-  if (depreciation > 0) html += '<div class="schedule-row"><span>Depreciation' + ' <span style="color:var(--muted);font-size:11px">(line 18)</span>' + '</span><span style="font-family:var(--mono);color:var(--red)">($' + depreciation.toLocaleString() + ')</span></div>';
-  html += '<div class="schedule-row total"><span>Total deductions</span><span style="font-family:var(--mono);color:var(--red)">($' + totalDeductions.toLocaleString(undefined, { maximumFractionDigits: 2 }) + ')</span></div>';
-  html += '<div class="schedule-row total" style="border-top:2px solid var(--border);padding-top:16px;margin-top:4px"><span>Net rental income (line 21)</span><span style="font-family:var(--mono);color:' + (net>=0?'var(--green)':'var(--red)') + '">$' + net.toLocaleString(undefined, { maximumFractionDigits: 2 }) + '</span></div>';
+  if (depreciation > 0) html += '<div class="schedule-row"><span>Depreciation' + ' <span style="color:var(--muted);font-size:11px">(line 18)</span>' + '</span><span style="font-family:var(--mono);color:var(--red)">($' + money(depreciation) + ')</span></div>';
+  html += '<div class="schedule-row total"><span>Total deductions</span><span style="font-family:var(--mono);color:var(--red)">($' + money(totalDeductions) + ')</span></div>';
+  html += '<div class="schedule-row total" style="border-top:2px solid var(--border);padding-top:16px;margin-top:4px"><span>Net rental income (line 21)</span><span style="font-family:var(--mono);color:' + (net>=0?'var(--green)':'var(--red)') + '">$' + money(net) + '</span></div>';
   document.getElementById('schedule-e').innerHTML = html;
   renderAssets();
 }

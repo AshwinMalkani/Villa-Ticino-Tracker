@@ -1,5 +1,8 @@
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
 
+// Store money as whole cents precision
+function cents(n) { return typeof n === 'number' ? Math.round(n * 100) / 100 : n; }
+
 const json = (data, status = 200) => Response.json(data, { status });
 
 export default {
@@ -22,13 +25,24 @@ export default {
         }
         await env.DB.prepare(
           'INSERT INTO transactions (id, date, description, type, category, unit, amount, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-        ).bind(id, date, description, type, category, unit, amount, notes || '').run();
+        ).bind(id, date, description, type, category, unit, cents(amount), notes || '').run();
         return json({ ok: true });
       }
 
       const txDelete = pathname.match(/^\/api\/transactions\/([^/]+)$/);
       if (txDelete && method === 'DELETE') {
         await env.DB.prepare('DELETE FROM transactions WHERE id = ?').bind(decodeURIComponent(txDelete[1])).run();
+        return json({ ok: true });
+      }
+
+      if (txDelete && method === 'PUT') {
+        const { date, description, type, category, unit, amount, notes } = await request.json();
+        if (!date || !description || !type || !category || !unit || !amount) {
+          return json({ error: 'Missing required fields' }, 400);
+        }
+        await env.DB.prepare(
+          'UPDATE transactions SET date = ?, description = ?, type = ?, category = ?, unit = ?, amount = ?, notes = ? WHERE id = ?'
+        ).bind(date, description, type, category, unit, cents(amount), notes || '', decodeURIComponent(txDelete[1])).run();
         return json({ ok: true });
       }
 
@@ -46,7 +60,7 @@ export default {
         }
         await env.DB.prepare(
           'INSERT INTO assets (id, item, cost, year, method, month) VALUES (?, ?, ?, ?, ?, ?)'
-        ).bind(id, item, cost, year, depMethod, month || 1).run();
+        ).bind(id, item, cents(cost), year, depMethod, month || 1).run();
         return json({ ok: true });
       }
 
@@ -81,7 +95,7 @@ export default {
         for (const t of transactions) {
           stmts.push(env.DB.prepare(
             'INSERT OR REPLACE INTO transactions (id, date, description, type, category, unit, amount, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-          ).bind(t.id || uid(), t.date ?? null, (t.description || t.desc) ?? null, t.type ?? null, (t.category || t.cat) ?? null, t.unit ?? null, t.amount ?? null, t.notes || ''));
+          ).bind(t.id || uid(), t.date ?? null, (t.description || t.desc) ?? null, t.type ?? null, (t.category || t.cat) ?? null, t.unit ?? null, cents(t.amount) ?? null, t.notes || ''));
         }
         for (const a of (assets || [])) {
           stmts.push(env.DB.prepare(

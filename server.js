@@ -91,6 +91,23 @@ app.delete('/api/transactions/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+app.put('/api/transactions/:id', (req, res) => {
+  const { date, description, type, category, unit, amount, notes } = req.body;
+  if (!date || !description || !type || !category || !unit || !amount) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+  try {
+    db.run(
+      `UPDATE transactions SET date = ?, description = ?, type = ?, category = ?, unit = ?, amount = ?, notes = ? WHERE id = ?`,
+      [date, description, type, category, unit, amount, notes || '', req.params.id]
+    );
+    saveToDisk();
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- Assets ---
 
 app.get('/api/assets', (req, res) => {
