@@ -113,10 +113,15 @@ export default {
         if (!row) return json({ error: 'Not found' }, 404);
         const obj = await env.DOCS.get('docs/' + id + '/' + row.name);
         if (!obj) return json({ error: 'File missing from storage' }, 404);
+        // Active content served inline from our origin could run scripts in the
+        // app's context — force those to download instead.
+        const ct = row.content_type || 'application/octet-stream';
+        const active = /html|svg|xml|javascript/i.test(ct);
         return new Response(obj.body, {
           headers: {
-            'Content-Type': row.content_type || 'application/octet-stream',
-            'Content-Disposition': 'inline; filename="' + row.name + '"'
+            'Content-Type': active ? 'application/octet-stream' : ct,
+            'Content-Disposition': (active ? 'attachment' : 'inline') + '; filename="' + row.name + '"',
+            'X-Content-Type-Options': 'nosniff'
           }
         });
       }
