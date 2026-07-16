@@ -44,8 +44,10 @@ async function initDB() {
     cost REAL NOT NULL,
     year INTEGER NOT NULL,
     method TEXT NOT NULL,
+    month INTEGER DEFAULT 1,
     created_at TEXT DEFAULT (datetime('now'))
   )`);
+  try { db.run('ALTER TABLE assets ADD COLUMN month INTEGER DEFAULT 1'); } catch (e) { /* column already exists */ }
 
   saveToDisk();
 }
@@ -99,14 +101,14 @@ app.get('/api/assets', (req, res) => {
 });
 
 app.post('/api/assets', (req, res) => {
-  const { id, item, cost, year, method } = req.body;
+  const { id, item, cost, year, method, month } = req.body;
   if (!id || !item || !cost || !year || !method) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
   try {
     db.run(
-      `INSERT INTO assets (id, item, cost, year, method) VALUES (?, ?, ?, ?, ?)`,
-      [id, item, cost, year, method]
+      `INSERT INTO assets (id, item, cost, year, method, month) VALUES (?, ?, ?, ?, ?, ?)`,
+      [id, item, cost, year, method, month || 1]
     );
     saveToDisk();
     res.json({ ok: true });
@@ -155,8 +157,8 @@ app.post('/api/import', (req, res) => {
     }
     for (const a of (assets || [])) {
       db.run(
-        `INSERT OR REPLACE INTO assets (id, item, cost, year, method) VALUES (?, ?, ?, ?, ?)`,
-        [a.id || uid(), a.item, a.cost, a.year, a.method]
+        `INSERT OR REPLACE INTO assets (id, item, cost, year, method, month) VALUES (?, ?, ?, ?, ?, ?)`,
+        [a.id || uid(), a.item, a.cost, a.year, a.method, a.month || 1]
       );
     }
     db.run('COMMIT');

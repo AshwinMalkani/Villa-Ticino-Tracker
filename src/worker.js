@@ -40,13 +40,13 @@ export default {
       }
 
       if (pathname === '/api/assets' && method === 'POST') {
-        const { id, item, cost, year, method: depMethod } = await request.json();
+        const { id, item, cost, year, method: depMethod, month } = await request.json();
         if (!id || !item || !cost || !year || !depMethod) {
           return json({ error: 'Missing required fields' }, 400);
         }
         await env.DB.prepare(
-          'INSERT INTO assets (id, item, cost, year, method) VALUES (?, ?, ?, ?, ?)'
-        ).bind(id, item, cost, year, depMethod).run();
+          'INSERT INTO assets (id, item, cost, year, method, month) VALUES (?, ?, ?, ?, ?, ?)'
+        ).bind(id, item, cost, year, depMethod, month || 1).run();
         return json({ ok: true });
       }
 
@@ -85,8 +85,8 @@ export default {
         }
         for (const a of (assets || [])) {
           stmts.push(env.DB.prepare(
-            'INSERT OR REPLACE INTO assets (id, item, cost, year, method) VALUES (?, ?, ?, ?, ?)'
-          ).bind(a.id || uid(), a.item ?? null, a.cost ?? null, a.year ?? null, a.method ?? null));
+            'INSERT OR REPLACE INTO assets (id, item, cost, year, method, month) VALUES (?, ?, ?, ?, ?, ?)'
+          ).bind(a.id || uid(), a.item ?? null, a.cost ?? null, a.year ?? null, a.method ?? null, a.month || 1));
         }
 
         try {

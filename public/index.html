@@ -266,6 +266,27 @@
       <div class="card-title">Schedule E &mdash; rental income &amp; expenses</div>
       <div id="schedule-e"></div>
     </div>
+    <div class="card">
+      <div class="card-title">Depreciation schedule &mdash; 27.5-year straight line</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:16px;font-family:var(--mono)">Add the building (cost basis excluding land &mdash; ask your CPA for the land/building split) and capital improvements. Year 1 is prorated by in-service month (mid-month convention). Appliances expensed under the de&nbsp;minimis rule stay as regular transactions, not here.</div>
+      <div class="table-wrap" style="margin-bottom:16px">
+        <table>
+          <thead><tr><th>Item</th><th>Cost basis</th><th>In service</th><th id="asset-dep-col">Deduction</th><th></th></tr></thead>
+          <tbody id="asset-body"></tbody>
+        </table>
+      </div>
+      <div class="form-row-3">
+        <div class="form-group"><label class="form-label">Item</label><input type="text" id="a-item" placeholder="e.g. Building (basis excl. land)"></div>
+        <div class="form-group"><label class="form-label">Cost basis ($)</label><input type="number" id="a-cost" placeholder="0.00" min="0" step="0.01"></div>
+        <div class="form-group"><label class="form-label">In service</label>
+          <div style="display:flex;gap:8px">
+            <select id="a-month" style="flex:1"></select>
+            <input type="number" id="a-year" style="width:90px" min="1990" max="2100">
+          </div>
+        </div>
+      </div>
+      <button class="btn primary" style="width:100%" onclick="addAsset()">Add to depreciation schedule</button>
+    </div>
     <div style="display:flex;gap:10px;margin-top:4px">
       <button class="btn primary" onclick="exportCSV()">&#8681; Export CSV for CPA</button>
       <button class="btn" onclick="exportJSON()">&#8681; Export JSON backup</button>
@@ -313,7 +334,52 @@ const CAT_COLORS = {
 };
 
 let transactions = [];
+let assets = [];
 let yearFilter = 'all';
+
+// Schedule E (Form 1040) line numbers for the CPA-facing summary
+const SCHED_E_LINE = {
+  'Advertising': 5,
+  'Mileage': 6,
+  'Insurance': 9,
+  'Insurance (paid from escrow)': 9,
+  'Professional fees': 10,
+  'Mortgage interest': 12,
+  'Repairs & maintenance': 14,
+  'Property tax': 16,
+  'Property tax (paid from escrow)': 16,
+  'Utilities': 17,
+  'Appliance (Section 179)': 18,
+  'Other expense': 19,
+  'Solar/energy': 19
+};
+
+// MACRS residential rental: 27.5-year straight line, mid-month convention in year 1.
+function assetDepreciationForYear(a, Y) {
+  var y0 = a.year, m = a.month || 1;
+  if (Y < y0) return 0;
+  var annual = a.cost / 27.5;
+  var taken = 0;
+  for (var y = y0; ; y++) {
+    var d = (y === y0) ? annual * (12 - m + 0.5) / 12 : annual;
+    d = Math.min(d, a.cost - taken);
+    if (d <= 0) return 0;
+    if (y === Y) return d;
+    taken += d;
+  }
+}
+
+function depreciationTotal(Y) {
+  var cur = new Date().getFullYear();
+  return assets.reduce(function(s, a) {
+    if (Y === 'all') {
+      var t = 0;
+      for (var y = a.year; y <= cur; y++) t += assetDepreciationForYear(a, y);
+      return s + t;
+    }
+    return s + assetDepreciationForYear(a, Number(Y));
+  }, 0);
+}
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
 
@@ -370,8 +436,51 @@ async function loadAll() {
   try {
     transactions = await api('GET', '/api/transactions');
     transactions = transactions.map(function(t) { return Object.assign({}, t, { desc: t.description || t.desc }); });
+    assets = await api('GET', '/api/assets');
     setDBStatus(true);
   } catch(e) { setDBStatus(false); }
+}
+
+async function addAsset() {
+  var item = document.getElementById('a-item').value.trim();
+  var cost = parseFloat(document.getElementById('a-cost').value);
+  var month = parseInt(document.getElementById('a-month').value, 10);
+  var year = parseInt(document.getElementById('a-year').value, 10);
+  if (!item || !cost || !year) { toast('Fill in item, cost, and year.'); return; }
+  var a = { id: uid(), item: item, cost: cost, year: year, month: month, method: 'SL-27.5' };
+  await api('POST', '/api/assets', a);
+  assets.unshift(a);
+  document.getElementById('a-item').value = '';
+  document.getElementById('a-cost').value = '';
+  renderTax();
+  toast('Added to depreciation schedule.');
+}
+
+async function deleteAsset(id) {
+  if (!confirm('Remove this asset from the depreciation schedule?')) return;
+  await api('DELETE', '/api/assets/' + id);
+  assets = assets.filter(function(a) { return a.id !== id; });
+  renderTax();
+  toast('Removed.');
+}
+
+var MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function renderAssets() {
+  var depYear = yearFilter === 'all' ? new Date().getFullYear() : Number(yearFilter);
+  document.getElementById('asset-dep-col').textContent = depYear + ' deduction';
+  var body = document.getElementById('asset-body');
+  if (!assets.length) { body.innerHTML = '<tr><td colspan="5"><div class="empty-state">No depreciable assets yet. Start with the building itself.</div></td></tr>'; return; }
+  body.innerHTML = assets.map(function(a) {
+    var dep = assetDepreciationForYear(a, depYear);
+    return '<tr>' +
+      '<td>' + a.item + '</td>' +
+      '<td style="font-family:var(--mono)">$' + a.cost.toLocaleString() + '</td>' +
+      '<td style="font-family:var(--mono);font-size:12px">' + MONTH_NAMES[(a.month || 1) - 1] + ' ' + a.year + '</td>' +
+      '<td class="tx-neg">' + (dep > 0 ? '($' + dep.toLocaleString(undefined, { maximumFractionDigits: 2 }) + ')' : '--') + '</td>' +
+      '<td><button class="delete-btn" onclick="deleteAsset(\'' + a.id + '\')">&#x2715;</button></td>' +
+      '</tr>';
+  }).join('');
 }
 
 async function addTransaction() {
@@ -738,9 +847,15 @@ function renderTax() {
   });
   var totalIncome = txs.filter(function(t){return t.type==='income';}).reduce(function(s,t){return s+t.amount;},0);
   var deductibleExpense = txs.filter(function(t){return t.type==='expense' && NON_DEDUCTIBLE.indexOf(t.category||t.cat) < 0;}).reduce(function(s,t){return s+t.amount;},0);
-  var net = totalIncome - deductibleExpense;
+  var depreciation = Math.round(depreciationTotal(yearFilter) * 100) / 100;
+  var totalDeductions = deductibleExpense + depreciation;
+  var net = totalIncome - totalDeductions;
 
-  var html = '<div class="schedule-row section-header"><span>Income</span><span></span></div>';
+  var lineTag = function(c) {
+    return SCHED_E_LINE[c] ? ' <span style="color:var(--muted);font-size:11px">(line ' + SCHED_E_LINE[c] + ')</span>' : '';
+  };
+
+  var html = '<div class="schedule-row section-header"><span>Income (line 3)</span><span></span></div>';
   INCOME_CATS.forEach(function(c) {
     if (cats[c] && cats[c].income > 0) html += '<div class="schedule-row"><span>' + c + '</span><span style="font-family:var(--mono);color:var(--green)">$' + cats[c].income.toLocaleString() + '</span></div>';
   });
@@ -748,16 +863,20 @@ function renderTax() {
   html += '<div class="schedule-row section-header"><span>Deductible expenses</span><span></span></div>';
   EXPENSE_CATS.forEach(function(c) {
     if (NON_DEDUCTIBLE.indexOf(c) >= 0) return;
-    if (cats[c] && cats[c].expense > 0) html += '<div class="schedule-row"><span>' + c + '</span><span style="font-family:var(--mono);color:var(--red)">($' + cats[c].expense.toLocaleString() + ')</span></div>';
+    if (cats[c] && cats[c].expense > 0) html += '<div class="schedule-row"><span>' + c + lineTag(c) + '</span><span style="font-family:var(--mono);color:var(--red)">($' + cats[c].expense.toLocaleString() + ')</span></div>';
   });
-  html += '<div class="schedule-row total"><span>Total deductible expenses</span><span style="font-family:var(--mono);color:var(--red)">($' + deductibleExpense.toLocaleString() + ')</span></div>';
-  html += '<div class="schedule-row total" style="border-top:2px solid var(--border);padding-top:16px;margin-top:4px"><span>Net rental income</span><span style="font-family:var(--mono);color:' + (net>=0?'var(--green)':'var(--red)') + '">$' + net.toLocaleString() + '</span></div>';
+  if (depreciation > 0) html += '<div class="schedule-row"><span>Depreciation' + ' <span style="color:var(--muted);font-size:11px">(line 18)</span>' + '</span><span style="font-family:var(--mono);color:var(--red)">($' + depreciation.toLocaleString() + ')</span></div>';
+  html += '<div class="schedule-row total"><span>Total deductions</span><span style="font-family:var(--mono);color:var(--red)">($' + totalDeductions.toLocaleString(undefined, { maximumFractionDigits: 2 }) + ')</span></div>';
+  html += '<div class="schedule-row total" style="border-top:2px solid var(--border);padding-top:16px;margin-top:4px"><span>Net rental income (line 21)</span><span style="font-family:var(--mono);color:' + (net>=0?'var(--green)':'var(--red)') + '">$' + net.toLocaleString(undefined, { maximumFractionDigits: 2 }) + '</span></div>';
   document.getElementById('schedule-e').innerHTML = html;
+  renderAssets();
 }
 
 document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
 document.getElementById('m-date').value = new Date().toISOString().split('T')[0];
 document.getElementById('d-date').value = new Date().toISOString().split('T')[0];
+document.getElementById('a-month').innerHTML = MONTH_NAMES.map(function(m, i) { return '<option value="' + (i + 1) + '">' + m + '</option>'; }).join('');
+document.getElementById('a-year').value = new Date().getFullYear();
 loadAll().then(function() {
   var cur = String(new Date().getFullYear());
   if (transactions.some(function(t) { return (t.date || '').slice(0, 4) === cur; })) yearFilter = cur;
