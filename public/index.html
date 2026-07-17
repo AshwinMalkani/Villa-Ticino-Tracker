@@ -224,6 +224,10 @@
           </select>
         </div>
         <div class="form-group"><label class="form-label">Notes (optional)</label><input type="text" id="f-notes" placeholder="e.g. receipt #1234"></div>
+        <div class="form-group"><label class="form-label">Receipt (optional)</label>
+          <button class="btn" style="justify-content:flex-start;overflow:hidden;white-space:nowrap;text-overflow:ellipsis" id="f-doc-btn" onclick="document.getElementById('f-doc').click()">&#128206; Attach file</button>
+          <input type="file" id="f-doc" style="display:none" onclick="event.stopPropagation()" onchange="fDocChanged(event)">
+        </div>
         <div style="display:flex;gap:8px">
           <button class="btn primary" style="flex:1" id="add-tx-btn" onclick="addTransaction()">Add transaction</button>
           <button class="btn" id="cancel-edit" style="display:none" onclick="cancelEdit()">Cancel</button>
@@ -698,6 +702,18 @@ function renderAssets() {
 }
 
 var editingId = null;
+var pendingReceipt = null;
+
+function fDocChanged(e) {
+  pendingReceipt = e.target.files[0] || null;
+  document.getElementById('f-doc-btn').innerHTML = pendingReceipt ? '&#128206; ' + pendingReceipt.name : '&#128206; Attach file';
+  e.target.value = '';
+}
+
+function clearPendingReceipt() {
+  pendingReceipt = null;
+  document.getElementById('f-doc-btn').innerHTML = '&#128206; Attach file';
+}
 
 async function addTransaction() {
   var d = document.getElementById('f-date').value;
@@ -718,6 +734,13 @@ async function addTransaction() {
     document.getElementById('f-desc').value = '';
     document.getElementById('f-notes').value = '';
     toast('Transaction saved.');
+  }
+  if (pendingReceipt) {
+    try {
+      await uploadDocBlob(pendingReceipt, 'receipt', tx.id);
+      toast('Saved with receipt attached.');
+    } catch(e) { toast('Saved, but receipt upload failed.'); }
+    clearPendingReceipt();
   }
   rebuildYearFilter();
   renderDashboard();
@@ -744,6 +767,7 @@ function editTransaction(id) {
 
 function cancelEdit() {
   editingId = null;
+  clearPendingReceipt();
   document.getElementById('f-amount').value = '';
   document.getElementById('f-desc').value = '';
   document.getElementById('f-notes').value = '';
