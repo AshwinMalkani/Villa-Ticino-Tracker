@@ -8,7 +8,7 @@ Income & expense tracker for a rental property — two units (main house + in-la
 
 - **Dashboard** — monthly cash-flow chart, expense breakdown, per-unit income split, one-tap quick-add buttons that log each unit's rent using its most recent amount (with duplicate-month warning)
 - **Investment metrics** — NOI and cap rate for the selected tax year, annualized for partial years and labeled with the data basis. NOI excludes debt service, escrow contributions, and capital expenditures per convention; property value is editable and persisted
-- **Transactions** — add, edit (loads into the form as "Save changes"), and delete; filter by unit and tax year; attach a receipt to any row via the paperclip
+- **Transactions** — add, edit (loads into the form as "Save changes"), and delete; filter by unit and tax year; attach a receipt in one step from the Add form (on mobile the picker includes taking a photo) or later via the paperclip on any row
 - **Tax-year filter** — a header dropdown drives the dashboard, table, tax summary, and exports; defaults to the current year
 - **Mortgage statement PDF upload** — drop a Truist billing statement on the Add Entry tab; principal, interest, escrow, and due date are parsed in the browser (pdf.js) and logged as three line items after confirmation, and the original PDF is auto-archived to Documents. Warns on duplicate months and validates against the statement total
 - **Correct escrow accounting** — monthly escrow contributions are tracked as non-deductible cash flow; deductions are recorded when the servicer actually disburses property tax/insurance (dedicated form, "paid from escrow" categories that appear on Schedule E but not in cash-flow metrics)
